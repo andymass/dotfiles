@@ -115,13 +115,13 @@ syn on
 runtime macros/matchit.vim
 
 " colorscheme setup
-set background=dark
-if !$NO_COLORSCRIPT && &term !~ 'putty'
-"   setting shell path is not necessary
-"    let g:base16_shell_path='~/scripts/base16-shell/'
-    let base16colorspace=256
-endif
-colorscheme base16-eighties
+" set background=dark
+" if !$NO_COLORSCRIPT && &term !~ 'putty'
+" "   setting shell path is not necessary
+" "    let g:base16_shell_path='~/scripts/base16-shell/'
+"     let base16colorspace=256
+" endif
+" colorscheme base16-eighties
 
 
 
@@ -251,6 +251,11 @@ endif
 
 
 
+for f in glob(g:config_home.'/site.'.hostname().'.vim', 1, 1)
+    exec 'source' f
+endfor
+
+
 
 
 
@@ -307,7 +312,7 @@ let g:airline#extensions#default#section_truncate_width = {
 
 " there is a base16_eighties theme but it maps normal mode to green
 " see https://github.com/vim-airline/vim-airline/issues/1067
-let g:airline_theme = 'base16'
+" let g:airline_theme = 'base16'
 
 " viewdoc
 " XXX
