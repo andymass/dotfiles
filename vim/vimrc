@@ -13,24 +13,24 @@
 " \g=, \g-      increment, decrement
 " \.            locally change directory
 " \/            remove highlight
-" \[            CtrlP mru
+" \[            CtrlP MRU
 " \]{motion},
 " \]],
 " {Visual}\],   Sling to tmux
 " \a
 " \b
 " \c
-" \d            YcmDiagnostic
+" \d            YcmCompleter GoTo (mnemonic: definition)
 " \e
 " \f            CtrlP to file under cursor
 " \g            :Ag prompt
 " \G            Ag file under cursor
 " \h
-" \i
+" \i            YcmDiagnostic (TODO)
 " \j
 " \k
-" \l            vimtex
-" \m
+" \l            vimtex mappings
+" \m            enable modeline & reload (TODO)
 " \n
 " \o            CtrlP (all files in directory)
 " \p            CtrlP buffers
@@ -42,10 +42,10 @@
 " \t            CtrlP tags
 " \T            Toggle tagbar
 " \u            Toggle latex-to-unicode
-" \v
+" \v            Toggle textwidth
 " \w            CtrlP locations
 " \W            Toggle location list
-" \x            :VdebugEval prompt
+" \x            :VdebugEval prompt (TODO)
 " \y            Yank to tmux
 " \z            Re-sync syntax highlighting
 "
@@ -55,22 +55,31 @@
 " gY            figlet font picker
 " g.            globally change directory
 " gb, gB        show syntax under cursor
+" gl            convert :emoji: into emoji
 "
 " yp, yP        open line and set paste (above, below)
 "
+" free keys: gz zp zu zy
+" <f20> to <f37>
 
 " Todo
 "   - ripgrep
 "   - syntastic -> ale
 "   - vdebug
+"   - completion
+"   - automatic indent / modelines
+"   - supertab chain?
+"   - what is setting up bracketed paste?
+"   - window management
+"   - map for :Trim
 
 " }}}1
 
 " the basics {{{1
-set nocompatible
+" set nocompatible
 set ts=4
-set sw=0
-set textwidth=75
+set sw=4
+set textwidth=74
 set wm=2
 set cc=+1
 set expandtab
@@ -80,11 +89,11 @@ set ffs=unix,dos
 set noswapfile
 set virtualedit=block
 
-set ttimeout ttimeoutlen=100
-set mouse=a
+set ttimeout ttimeoutlen=10
+set mouse=a ttymouse=xterm2
 
 set nu
-set hlsearch
+if !&hlsearch | set hlsearch | endif
 set spell spelllang=en_us
 set spellsuggest=best,5
 set thesaurus=~/.vim/config/mthesaur.txt
@@ -103,7 +112,7 @@ set formatoptions+=jl
 " set fillchars=vert:║,fold:- ─
 set fillchars=stl:\ ,stlnc:\ ,fold:\ ,vert:│
 set listchars=trail:·
-let &showbreak = ' → '
+let &showbreak = " ❯❯❯ "   " ∴  ⮱  → ↳ 🡆 ❯
 
 set laststatus=2
 set scrolloff=2
@@ -112,13 +121,12 @@ set wildmode=longest:full,full
 set suffixes+=.pdf,.synctex
 set isfname-==
 
-set splitbelow
+set splitbelow   " nb ctrlp sets this
 set splitright
 set switchbuf=useopen,split
 set previewheight=18
 
-set nomodeline
-" set modelines=0
+set nomodeline modelines=3
 set infercase
 
 set nosol
@@ -144,16 +152,28 @@ if executable('ag')
 endif
 
 if exists(':Ag')
-    nnoremap <leader>G :execute "Ag " . expand("<cword>") <cr>
+    nnoremap <leader>G :Ag -Q <c-r>=escape(shellescape(expand("<cword>"),1),'\|#%')<cr><cr>
     nnoremap <leader>g :Ag 
 endif
 
+" opts
+let g:rc_disable_youcompleteme = 1
+if get(g:, 'rc_disable_youcompleteme', 0)
+    let g:loaded_youcompleteme = 1
+endif
 
-
+" load site-specific configs
 let g:config_home = expand('~/.vim/config')
 autocmd BufRead .vimrc exe 'setl path+='.g:config_home
 
 let g:within_tmux = ($TMUX != '')
+
+let g:site_config = g:config_home.'/site.'.hostname().'.vim'
+if !filereadable(g:site_config)
+    let g:site_config = g:config_home.'/site.default.vim'
+endif
+
+exec 'source' g:site_config
 
 " }}}1
 
@@ -190,19 +210,29 @@ augroup vim_startup
     autocmd!
     autocmd BufReadPost * 
         \ if line("'\"") > 0 && line("'\"") <= line("$")
-        \| exe "normal! g'\"" | endif
+        \| exe "normal! g`\"zv" | endif
 augroup END
 
-" allows cursor change in tmux mode
+" allows cursor to change
+" XXX this can be cleaned up, maybe just use wincent/terminus
+" also see jszakmeister/vim-togglecursor
 if exists('$TMUX')
-    let &t_SI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=1\x7\<Esc>\\"
-    let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
-    let &t_SR = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=2\x7\<Esc>\\"
+    " let &t_SI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=1\x7\<Esc>\\"
+    " let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
+    " let &t_SR = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=2\x7\<Esc>\\"
+    " this requires tmux codes to be set appropriately
+    let &t_SI = "\<Esc>[6 q"
+    let &t_EI = "\<Esc>[2 q"
+    let &t_SR = "\<Esc>[4 q"
 else
     let &t_SI = "\<Esc>]50;CursorShape=1\x7"
     let &t_EI = "\<Esc>]50;CursorShape=0\x7"
     let &t_SR = "\<Esc>]50;CursorShape=2\x7"
 endif
+
+
+" ."\<Esc>]50;BlinkingCursorEnabled=2\x7",
+
 
 " transparent background
 if !has("gui_running")
@@ -236,9 +266,21 @@ let g:vimtex_indent_ignored_envs = ['document', 'aligned']
 
 " ultisnips {{{2
 let g:UltiSnipsSnippetDirectories=["ultisnips"]
-let g:UltiSnipsExpandTrigger='<c-t>'
-let g:UltiSnipsJumpForwardTrigger='<c-t>'
-let g:UltiSnipsJumpBackwardTrigger='<c-d>'
+let g:UltiSnipsExpandTrigger='<sid>(snipexpand)'
+let g:UltiSnipsListSnippets='<sid>(sniplist)'
+let g:UltiSnipsJumpForwardTrigger='<c-j>'
+let g:UltiSnipsJumpBackwardTrigger='<c-k>'
+
+" TODO
+function! UltiSnipsShim()
+   call UltiSnips#ExpandSnippetOrJump()
+   if get(g:,'ulti_expand_or_jump_res',0)
+      return ''
+   else
+      return 'hello'
+   endif
+endfunction
+inoremap <c-]> <c-r>=UltiSnipsShim()<cr>
 
 " let g:UltiSnipsListSnippets
 
@@ -312,22 +354,35 @@ let g:UltiSnipsJumpBackwardTrigger='<c-d>'
 " xxx where should this be?
 let g:user_completion_chain = [ 
      \ 'emoji#complete', 
-     \ 'syntaxcomplete#Complete' ]
+     \ 'syntaxcomplete#Complete',
+     \ ]
 
 " autocmd Filetype *
 "     \   if &omnifunc == "" |
 "     \       setlocal omnifunc=MyComplete |
 "     \   endif
 
-function! EmoComplete(findstart, base)
-    echo a:findstart
-    sleep 1
-    echo a:base
-    sleep 1
+function! EmojiComplete(findstart, base)
+    let l:omni = emoji#complete(a:findstart, a:base)
+    return l:omni
+
+    " if a:findstart
+    "     if l:omni < 0
+    "         return -1
+    "     endif
+    "     return l:omni+1
+    " endif
+    " return l:omni
+
+    " echo 'findstart' a:findstart 'base' a:base '-> omni' l:omni
+    " sleep 1
     " echo emoji#complete(a:findstart, a:base)
     " sleep 2
-    return emoji#complete(a:findstart, a:base)
 endfunction
+
+" let g:ycm_seed_identifiers_with_syntax = 1
+" let g:ycm_collect_identifiers_from_tags_files = 1
+
 
 " autocmd Filetype *
 "     \   if &omnifunc == "" |
@@ -340,29 +395,38 @@ endfunction
     " setlocal omnifunc=emoji#complete
 " endif
 
+" if the filetype provides no omnifunc, use the custom chain
 autocmd Filetype * if &omnifunc == "" 
-    \ |     setlocal omnifunc=syntaxcomplete#Complete
+    \ |     setlocal omnifunc=CompletionChain
     \ | endif
 
+" autocmd Filetype * if &omnifunc == "" 
+"     \ |     setlocal omnifunc=syntaxcomplete#Complete
+"     \ | endif
 
-for f in glob(g:config_home.'/site.'.hostname().'.vim', 1, 1)
-    exec 'source' f
-endfor
+
+call SiteSetupAppearance()
+
+" for f in glob(g:config_home.'/site.'.hostname().'.vim', 1, 1)
+"     exec 'source' f
+" endfor
 
 " gutentags {{{2
 let g:gutentags_project_root = [ 'latexmkrc' ]
-let g:gutentags_generate_on_new = 0
 let g:gutentags_generate_on_missing = 0
-let g:gutentags_generate_on_write = 0
+let g:gutentags_generate_on_new = 0
+let g:gutentags_generate_on_write = 1
+let g:gutentags_cache_dir = '/home/andy/.cache/gutentags'
 
+" let g:gutentags_ctags_tagfile
 " let g:gutentags_project_root = ['tags'] 
 " let g:gutentags_add_default_project_roots = 0
-" let g:gutentags_cache_dir = '/home/andy/.cache/gutentags'
 "}}}2
 
 " netrw/vim-vinegar {{{2
 let g:netrw_list_hide = '\(^\|\s\s\)\zs\.\S\+'
 "}}}2
+
 
 " airline {{{2
 let g:airline_mode_map = {
@@ -386,11 +450,13 @@ if !exists('g:airline_symbols')
 endif
 let g:airline_symbols.branch = ''
 let g:airline_symbols.readonly = '🔒'   " 
-let g:airline_symbols.linenr = ''
+let g:airline_symbols.linenr = '≡' " ♫'
 let g:airline_symbols.paste = '🐧'   	" hhp
 let g:airline_symbols.whitespace = 'w'
 
-let g:airline_symbols.notexists = ' 🚫'
+let g:airline_symbols.notexists = '*'
+let g:airline_symbols.maxlinenr = ''
+
 " let g:airline_symbols.modified = 'm'
 " let g:airline_symbols.modified = ' 💡'
 " let g:airline_symbols.space = '~'
@@ -407,11 +473,54 @@ let g:airline#extensions#tagbar#enabled = 1
 " let g:airline#extensions#tagbar#flags = 'p'
 
 let g:airline#extensions#vimtex#enabled = 0
+let g:airline#extensions#vimtex#left = "("
+let g:airline#extensions#vimtex#right = ")"
+
 
 let g:airline_section_error = ''  " temporary, to hide red arrow
 let g:airline_section_warning = ''
 " let g:airline_skip_empty_sections = 1
-  
+
+" let spc = g:airline_symbols.space
+" let g:airline_section_z = airline#section#create(['windowswap', 'obsession', '%3p%%'.spc, 'linenr', 'maxlinenr', spc.':%3v'])
+
+" let g:airline_section_y = 
+"             \ '%{airline#util#prepend(airline#parts#ffenc(),0)}'
+"             \ . '%{airline#util#wrap("✦".winnr().".".bufnr("%"),10)}'
+"
+
+function! WindowNumber(...)
+    let builder = a:1
+    let context = a:2
+    echo builder | sleep 1
+    call builder.add_section('airline_b', '%{tabpagewinnr(tabpagenr())}')
+    return 0
+endfunction
+" call airline#add_statusline_func('WindowNumber')
+" call airline#add_inactive_statusline_func('WindowNumber')
+
+function! ThisWay()
+    return '✦'.winnr().'.'.bufnr("%").' '
+endfunction
+call airline#parts#define_function('thisway', 'ThisWay')
+
+function! GetFooText()
+    return 'hello'
+endfunction
+call airline#parts#define_function('foo', 'GetFooText')
+" call airline#parts#define_minwidth('ffenc', 100)
+call airline#parts#define_minwidth('foo', 50)
+" let g:airline_section_y = airline#section#create_right(['ffenc', 'foo'])
+
+" let g:airline_section_z = airline#section#create(['windowswap', '%3p%% ', 'linenr', 'maxlinenr', ' :%3v'])
+
+
+" XXX
+let g:airline#extensions#windowswap#enabled = 1
+let g:airline#extensions#windowswap#indicator_text = '👌' " 🍔 WS'
+
+let g:airline_section_z = airline#section#create(
+    \ ['windowswap', 'thisway', 'linenr', 'maxlinenr', ' :%3v'])
 
 if 0
 
@@ -526,8 +635,17 @@ let g:vdebug_keymap = {
     \}
 
 
-
 " vimtex
+let g:vimtex_delim_list = {'mods' : {}}
+let g:vimtex_delim_list.mods.name = [
+      \ ['\left', '\right'],
+      \ ['\mleft', '\mright'],
+      \ ['\bigl', '\bigr'],
+      \ ['\Bigl', '\Bigr'],
+      \ ['\biggl', '\biggr'],
+      \ ['\Biggl', '\Biggr'],
+      \]
+
 let g:vimtex_compiler_latexmk = {
     \   'backend'    : 'jobs',
     \   'background' : 1,
@@ -544,6 +662,9 @@ let g:vimtex_quickfix_latexlog = {
     \ 'underfull' : 0,
     \}
 
+let g:vimtex_format_enabled = 1
+
+
 " let g:vimtex_latexmk_continuous = 0
 " let g:vimtex_latexmk_background = 1
 " let g:vimtex_quickfix_ignore_all_warnings = 0
@@ -559,7 +680,8 @@ let g:vimtex_quickfix_latexlog = {
 " zotero + betterbibtex
 augroup filetype_tex_b
     autocmd!
-    autocmd FileType tex nnoremap <silent> <leader>c :r!cite<cr>
+    autocmd FileType tex nnoremap <buffer> <silent> <leader>c :r!cite<cr>
+    autocmd Filetype tex nmap <buffer> <silent> K <plug>(vimtex-doc-package)
 augroup END
 
 " vimtex + surround
@@ -592,8 +714,14 @@ let g:ycm_semantic_triggers.tex = [
     \ 're!\\[A-Za-z]*',
     \ ]
 
+let g:ycm_semantic_triggers.text = [
+    \ 're!:\w',
+    \ ]
+
 let g:ycm_key_invoke_completion = '<f19>'
 " let g:ycm_cache_omnifunc = 0
+
+let g:ycm_key_detailed_diagnostics = '<f2>'
 
 function! VimtexHelpLookup()
     let l:start = vimtex#complete#omnifunc(1, [])
@@ -609,13 +737,17 @@ function! VimtexHelpLookup()
     end
 endfunction
 
+  let g:ycm_show_diagnostics_ui = 0
+
 " nnoremap K :call VimtexHelpLookup()<cr>
 
 
 " xxx this is bad, fix
-let g:ycm_semantic_triggers.text = [ 
-    \ 're!:arrow',
-    \ ]
+" let g:ycm_semantic_triggers.text = [ 
+"     \ 're!:arrow',
+"     \ ]
+
+let g:ycm_global_ycm_extra_conf = '~/.vim/.ycm_extra_conf.py'  
 
 " CompleteDone
 " set completefunc=emoji#complete
@@ -660,6 +792,13 @@ let g:ctrlp_prompt_mappings = {
     \ }
 
 let g:ctrlp_working_path_mode = 'ca'
+
+
+" call CtrlPGeneric(a_vim_list, 'MyGreatCallback')
+
+" function! MyGreatCallback(selected_value) range
+"     echo "You selected: " . a:selected_value
+"  endfunction
 
 " }}}2
 
@@ -744,12 +883,105 @@ let g:commentary_map_backslash = 0
 "     \   'latexmkrc': 'latexmk',
 "     \}
 
+" XXX annoying mapping
+" map <unique> <Leader>hlt <Plug>HiLinkTrace
+
 let g:secure_modelines_allowed_items = [
     \ "textwidth",   "tw",
     \ "softtabstop", "sts",
     \ "tabstop",     "ts",
     \ "shiftwidth",  "sw",
     \ ]
+
+function! FixSwTs()
+    " echo 'FixSwTs'
+    if &shiftwidth > 0
+        let &tabstop = &shiftwidth
+        let &shiftwidth=0
+    endif
+endfunction
+
+
+" shiftwidth tabstop softtabstop smarttab expandtab
+" preserveindent?
+
+" au BufRead * echo 'BufRead '.&shiftwidth | sleep 1
+" au BufEnter * call FixSwTs()
+
+au BufRead * call FixSwTs()
+
+" need to use BufEnter or BufReadEnter for overrides
+
+" }}}1
+
+" ────────────────────────────────────────────────────────────────────────
+"                               __     __  _           
+"   _________  ____ ___  ____  / /__  / /_(_)___  ____ 
+"  / ___/ __ \/ __ `__ \/ __ \/ / _ \/ __/ / __ \/ __ \
+" / /__/ /_/ / / / / / / /_/ / /  __/ /_/ / /_/ / / / /
+" \___/\____/_/ /_/ /_/ .___/_/\___/\__/_/\____/_/ /_/ 
+"                    /_/                               
+" ────────────────────────────────────────────────────────────────────────
+" completion {{{1
+
+" I use youcompleteme, so only the omnifunc is relevant
+
+
+
+" explicit completion is performed with ctrl-L
+
+
+
+
+" insert-mode expansion is performed with ctrl-]
+let g:user_expansion_chain = [
+         \ 's:ExpandSnippet', 
+         \ 's:ExpandEmoji', 
+         \ 's:ExpandFallback',
+         \ ]
+
+function! s:ExpandSnippet()
+   call UltiSnips#ExpandSnippetOrJump()
+   if get(g:,'ulti_expand_or_jump_res',0)
+      return 1
+   else
+      return 0
+   endif
+endfunction
+
+function! s:ExpandEmoji()
+   return EmojiReplace()
+endfunction
+
+function! s:ExpandFallback()
+   call feedkeys("\<F19>")
+   return 1
+endfunction
+
+function! s:DoExpansion()
+   for l:fcn in g:user_expansion_chain
+      let l:ret = call(l:fcn, [])
+      if l:ret isnot 0
+         let s:current_expansion = fcn
+         return ''
+      endif
+   endfor
+   return ''
+endfunction
+
+" normal available: Ctrl-@ Ctrl-X Ctrl-K Ctrl-\ Ctrl-_ 
+" insert available: Ctrl-F Ctrl-L Ctrl-]...
+
+" <c-r> instead of <expr> because we may modify the buffer
+imap <sid>(expansion) <c-r>=<sid>DoExpansion()<cr>
+
+" <c-r>=UltiSnipsShim()<cr>
+imap <F7> <sid>(expansion)
+
+" function! FFF()
+"    return mode()
+" endfunction
+" imap <F7> <c-r>=FFF()<cr>
 
 " }}}1
 
@@ -764,7 +996,7 @@ let g:secure_modelines_allowed_items = [
 " commands {{{1
 
 " source our .vimrc
-command! ReloadVimrc :source $MYVIMRC
+command! ReloadVimrc source $MYVIMRC | redraw | echo $MYVIMRC.' reloaded'
 
 
 " check for a shebang line and set up to execute
@@ -778,7 +1010,9 @@ function! SetShebangRun()
 endfunction
 
 " displays a list of figlet fonts
-function! s:FigPickerMode()
+function! s:FigPickerMode() range
+    echo 'range = ' . a:firstline . ',' . a:lastline
+
     let figfontwinnr = bufwinnr('__Figpicker__')
     if figfontwinnr != -1
         execute figfontwinnr . 'wincmd w'
@@ -799,6 +1033,8 @@ function! s:FigPickerMode()
         nnoremap <silent> <buffer> q :wincmd c<cr>
         nnoremap <silent> <buffer> 
             \ <cr> ^y$:let g:figletFont='<c-r>"'<cr><c-w>p
+        nnoremap <buffer>
+            \ <space> :let g:figletFont='<c-r>=getline('.')<cr>'<cr><c-w>p:Figlet
     endtry
     setl nomodifiable nomodified
 endfunction
@@ -938,9 +1174,9 @@ endfunction
 
 command! Bind windo setl scrollbind | setl cursorbind | setl cursorline
 
-
+" folding
 set foldmethod=marker
-set foldlevel=0
+" set foldlevel=0
 set foldcolumn=0
 set foldtext=FoldText()
 
@@ -959,7 +1195,7 @@ function! FoldText()
 
     let l:foldSize = 1 + v:foldend - v:foldstart
     let l:foldSizeStr = l:foldSize . ' lines'
-    let l:foldLevelStr = repeat('*', v:foldlevel)
+    let l:foldLevelStr = repeat('•', v:foldlevel)
     let l:lineCount = line('$')
     let l:foldPerc = printf('(%.1f%%)', (100.0*l:foldSize)/l:lineCount)
     let l:left = '[ ' . l:line . ' '
@@ -971,7 +1207,7 @@ function! FoldText()
     return l:left . l:expansionString . l:right
 endfunction
 
-function TerseOneFoldText()
+function! TerseOneFoldText()
     let l:line = getline(v:foldstart)
     " let line = substitute( line, '^[^0-9a-zA-Z]*', '', '' )
     let l:com_str = split(substitute(&commentstring, " ", "", "g" ), "%s")
@@ -1015,10 +1251,12 @@ function! ToggleTextWidth()
     endif
 endfunction
 
-nnoremap <leader>v :call ToggleTextWidth()<cr>
+nnoremap <silent> <leader>v :call ToggleTextWidth()<cr>
 
-autocmd OptionSet shiftwidth noautocmd 
-      \ let &l:tabstop = &l:shiftwidth | let &l:shiftwidth=0
+" XXX re-enable
+" autocmd OptionSet shiftwidth noautocmd 
+"       \ let &l:tabstop = &l:shiftwidth | let &l:shiftwidth=0
+"
 
 " autocmd BufReadPost * echom string(&shiftwidth).'|'.string(&l:shiftwidth)
 
@@ -1055,6 +1293,26 @@ function! CompletionChain(findstart, base)
 
   return []
 endfunction
+
+
+" 
+function! RefreshAppearance()
+   if g:within_tmux
+      exe 'let $'.system('tmux show-environment COLORSCHEME')
+   endif
+endfunction
+
+" }}}1
+
+" ────────────────────────────────────────────────────────────────────────
+"      _____ __        __                       
+"     / __(_) /__     / /___  ______  ___  _____
+"    / /_/ / / _ \   / __/ / / / __ \/ _ \/ ___/
+"   / __/ / /  __/  / /_/ /_/ / /_/ /  __(__  ) 
+"  /_/ /_/_/\___/   \__/\__, / .___/\___/____/  
+"                      /____/_/                 
+" ────────────────────────────────────────────────────────────────────────
+" file types {{{1
 
 " }}}1
 
@@ -1128,7 +1386,7 @@ nnoremap gB :echo "hi<"
 " gl
 " gy figlet
 " gz
-" zp
+" zp  << map to window stuff?
 " zu
 " zy
 
@@ -1161,6 +1419,7 @@ augroup END
 
 " matlab
 autocmd FileType matlab setlocal commentstring=%\ %s
+" setl path+=/opt/MATLAB/R2017a/toolbox/matlab/**
 
 " TODO: use makeprg for these?
 " xxx
@@ -1239,8 +1498,15 @@ noremap   <Right>  <NOP>
 " easier movement in command mode
 cnoremap <c-h> <left>
 cnoremap <c-l> <right>
-cnoremap <c-o> <s-right>
 cnoremap <c-x> <s-left>
+cnoremap <c-o> <s-right>
+
+" XXX considered harmful?
+set <f20>=b
+cnoremap <f20> <s-left>
+
+set <f21>=f
+cnoremap <f21> <s-right>
 
 " vdebug
 nnoremap <Leader>x :<C-U>VdebugEval 
@@ -1300,33 +1566,254 @@ nmap <silent> <leader>f :<C-U>call CtrlPCursorFile()<CR>
 
 " autocmd FileType matlab nnoremap <buffer> K :Mhelp <C-R>=expand('<cword>')<CR><CR>
 
+
+
+" normal available: Ctrl-@ Ctrl-X Ctrl-K Ctrl-\ Ctrl-_ 
+
 " increment/decrement
-nnoremap <leader>- <c-x>
-vnoremap <leader>- <c-x>
-vnoremap <leader>g- g<c-x>
-nnoremap <leader>= <c-a>
-vnoremap <leader>= <c-a>
-vnoremap <leader>g= g<c-a>
+set nrformats+=alpha
+
+" these can be repeated with '.' so don't need to be easy to hit
+nnoremap <leader>, <c-x>
+vnoremap <leader>, <c-x>
+vnoremap g<leader>, g<c-x>
+nnoremap <leader>; <c-a>
+vnoremap <leader>; <c-a>
+vnoremap g<leader>; g<c-a>
+
+" nnoremap <c-k> <c-a>
+" nnoremap <c-j> <c-x>
+" vnoremap <c-k> <c-a>
+" vnoremap <c-j> <c-x>
+" vnoremap g<c-k> g<c-a>
+" vnoremap g<c-j> g<c-x>
+
+" shortcut to repeat macro (this is also control-space)
+nnoremap <c-@> @@
+
 
 " ctrl a conflicts with tmux
 nnoremap <c-a> <nop>
 
 " go to end of current word and start completion
 function! s:EndOfWord()
-    if getpos('.')[2] > 1
-        normal! h
-    endif
-    normal! e
+    call search('\w\>','cW')
 endfunction
 nmap <silent> <c-x> :call <sid>EndOfWord()<cr>a<f19>
 
 " g:ycm_key_invoke_completion
-imap <c-z> <f19>
+imap <c-l> <f19>
+
+" or use chrisbra/unicode.vim
+" convert :emoji: under or next to the cursor to the appropriate emoji
+" works in normal mode or insert mode
+" TODO: support visual mode
+function! EmojiReplace()
+   let l:pat = ':\([^:]\+\):'
+   let l:line = getline('.')
+   let l:start = 0
+   while l:start >= 0 
+      let l:match = matchstrpos(l:line, l:pat, l:start)
+      let l:curp = col('.') + (mode() == 'i' ? -1 : 0)
+      if l:curp > l:match[1] && l:curp <= l:match[2]
+         let l:em = substitute(l:match[0], 
+            \ l:pat, '\=emoji#for(submatch(1))', '')
+         if !len(l:em)
+            return 0
+         endif
+
+         call cursor(0, 1+l:match[1])
+         if mode() == 'i'
+            let l:line = strpart(l:line, 0, l:match[1])
+                     \ . l:line[l:match[2]:]
+            call setline('.', l:line)
+            call feedkeys(l:em)
+         else
+            let l:line = strpart(l:line, 0, l:match[1])
+                     \ .l:em . l:line[l:match[2]:]
+            call setline('.', l:line)
+         endif
+
+         " exe 'normal! '.(l:match[1]+1).'|'
+         " exe 'normal! v'.l:match[2].'|c'.l:em
+         return ''
+      endif
+      let l:start = l:match[2]
+   endwhile
+   return 0
+endfunction
+
+" TODO allow repeat
+nnoremap <silent> gl :call EmojiReplace()<cr>
+
+" au CompleteDone * if len(v:completed_item) > 1 | call EmojiReplace() | endif
+
+
+inoremap <c-f> <c-r>=EmojiReplace()<cr>
+" inoremap <c-f> <left><c-\><c-o>:call EmojiReplace()<cr><right>
+
+
+"nnoremap <silent> gl :s/:\([^:]\+\):/\=emoji#for(submatch(1), submatch(0))/g<cr>
+" nnoremap <silent> gl :s/:\([^:]\+\):/\=
+"     \ emoji#for(submatch(1), submatch(0))/e<cr>:nohls<cr>
+" vnoremap <silent> gl :s/:\([^:]\+\):/\=
+"     \emoji#for(submatch(1), submatch(0))/ge<cr>:nohls<cr>
+
+" ycm goto
+nnoremap <leader>d :YcmCompleter GoTo<CR>
+
+" search for cursor word without jumping
+function! SearchWord()
+    let @/ = '\<'.escape(expand('<cword>'), 
+        \ &magic ? "/.*~[^$\\" : "/^$\\").'\>'
+endfunction
+nnoremap <silent> <leader>* :call SearchWord() \| set hlsearch<cr>
+
+" change cursor word and load search to quickly change occurrences
+" dot can be used to repeat the search+change combo
+nnoremap <leader>c :call SearchWord() \| set hlsearch<cr>cgn
+
+" xxx experimental
+" nnoremap <silent> <space>+
+"     \ <c-w>+:call repeat#set("<c-v><c-w>+", v:count)<cr>
+" nnoremap <silent> <space>-
+"     \ <c-w>-:call repeat#set("<c-v><c-w>-", v:count)<cr>
+" nnoremap <silent> <space><lt>
+"     \ <c-w><lt>:call repeat#set("<c-v><c-w><lt>", v:count)<cr>
+" nnoremap <silent> <space>>
+"     \ <c-w>>:call repeat#set("<c-v><c-w>>", v:count)<cr>
+
+" reload vimrc
+nnoremap <silent> <leader>` :ReloadVimrc<cr>
+nnoremap <silent> <leader>~ :PlugUpdate<cr>
+
+
+" XXX experimental (does this break copy paste in tmux??)
+" see: sjl/vitality.vim, tmux-plugins/vim-tmux-focus-events,
+" amerlyq/vim-focus-autocmd wincent/terminus
+function! SetupFocusReporting()
+    let save_screen = "\<Esc>[?1049h"
+    let restore_screen = "\<Esc>[?1049l"
+    let tmux_start = "\<Esc>Ptmux;"
+    let tmux_end = "\<Esc>\\"
+    let enable_focus_reporting = "\<Esc>[?1004h"
+    let escaped_enable_focus_reporting = tmux_start
+                \ . "\<Esc>" . enable_focus_reporting
+                \ . tmux_end
+                \ . enable_focus_reporting
+    let disable_focus_reporting = "\<Esc>[?1004l"
+
+    let &t_ti = escaped_enable_focus_reporting . save_screen
+    let &t_te = disable_focus_reporting . restore_screen
+    exec "set <F24>=\<Esc>[O"
+    exec "set <F25>=\<Esc>[I"
+
+    nnoremap <silent> <f24> :silent doautocmd FocusLost %<cr>
+    nnoremap <silent> <f25> :silent doautocmd FocusGained %<cr>
+
+    onoremap <silent> <f24> <esc>:silent doautocmd FocusLost %<cr>
+    onoremap <silent> <f25> <esc>:silent doautocmd FocusGained %<cr>
+
+    vnoremap <silent> <f24> <esc>:silent doautocmd FocusLost %<cr>gv
+    vnoremap <silent> <f25> <esc>:silent doautocmd FocusGained %<cr>gv
+
+    inoremap <silent> <f24> <c-\><c-o>:silent doautocmd FocusLost %<cr>
+    inoremap <silent> <f25> <c-\><c-o>:silent doautocmd FocusGained %<cr>
+
+    cnoremap <silent> <f24> <c-\>e<SID>DoCmdModeFocus('FocusLost')<cr>
+    cnoremap <silent> <f25> <c-\>e<SID>DoCmdModeFocus('FocusGained')<cr>
+endfunction
+
+function! s:DoCmdModeFocus(event)
+    let cmd = getcmdline()
+    let pos = getcmdpos()
+    exec 'silent doautocmd '.a:event.' %'
+    call setcmdpos(pos)
+    return cmd
+endfunction
+
+if g:within_tmux
+    call SetupFocusReporting()
+endif
+
+
+" XXX smart-ish re-layout
+" this has the nice properties of mostly preserving order,
+" but does not swap out to master correctly
+function! Relayout()
+   let l:nr = winnr()
+   let l:nrlast = winnr('#')
+   windo wincmd J
+   exe l:nrlast.'wincmd w'
+   exe l:nr.'wincmd w'
+   if &columns > (&textwidth)+20
+      wincmd H
+   else
+      wincmd K
+      wincmd _
+   endif
+endfunction
+" nnoremap <silent> <c-w><space> :call Relayout()<cr>
+
+command! -nargs=* LayoutH call window#layout('ball', 'H', <args>)
+nnoremap <c-w><space> :<c-u>LayoutH v:count<cr>
+nnoremap <C-w>gl :<C-U>call window#join('rightbelow vsplit', v:count) <BAR>normal! 100zh<CR>
+nnoremap <C-w>gh :<C-U>call window#join('leftabove vsplit', v:count)  <BAR>normal! 100zh<CR>
+nnoremap <C-w>gj :<C-U>call window#join('belowright split', v:count)  <BAR>normal! 100zh<CR>
+nnoremap <C-w>gk :<C-U>call window#join('aboveleft split', v:count)   <BAR>normal! 100zh<CR>
+nnoremap <C-w>e :<C-U>call window#exchange(v:count)<cr>
+
+" sanity
+" stack
+" bi-stack
+" tri-stack
+" accordionize
+" by name
+" option: ball or only visible
+
+" using wincmd allows us to repeat with @: (XXX but wait not actually...?)
+" nmap , :5wincmd <<cr>
+" nmap . :5wincmd ><cr>
+
+let g:res_ver_increm = round(&columns*0.03)
+let g:res_hor_increm = round(&lines*0.08)
+
+nnoremap <silent> , :vertical res -5<cr>
+nnoremap <silent> . :vertical res +5<cr>
+nnoremap <silent> < :vertical res -1<cr>
+nnoremap <silent> > :vertical res +1<cr>
+nnoremap <silent> - :res -3<cr>
+nnoremap <silent> = :res +3<cr>
+nnoremap <silent> _ :res -1<cr>
+nnoremap <silent> + :res +1<cr>
+
+" nnoremap gl :exe 'echo '.v:count<cr>
+
+set noequalalways  " window management
+" set eadirection=ver,hor,both
+
+" enough for 3 windows stacked vertically with LINES=38, winminheight=1
+" set winheight=32 winwidth=16
+set winheight=20 winwidth=16
+set winminheight=1 winminwidth=0
+
+let g:windowswap_map_keys = 0
+" XXX better keymaps?
+"     why doesn't airline work with this?
+" nnoremap <c-w>m :call WindowSwap#MarkWindowSwap()<CR>
+" nnoremap <c-w>' :call WindowSwap#DoWindowSwap()<CR>
+
+
+" see airline extension
 
 " }}}1
+
+" xxx s:init code
 
 " final setup
 call SiteSetupPost()
 
 set secure
+
+" vim: sw=4
 
