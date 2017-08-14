@@ -59,7 +59,7 @@
 "
 " yp, yP        open line and set paste (above, below)
 "
-" free keys: gz zp zu zy
+" free keys: gz zp zy z/ g/ z\ g\
 " <f20> to <f37>
 
 " Todo
@@ -72,6 +72,10 @@
 "   - what is setting up bracketed paste?
 "   - window management
 "   - map for :Trim
+"   - vim-devicons
+"   - fmt equalprg vs q
+"   - help abbr
+"   - look into cycle/switch
 
 " }}}1
 
@@ -99,6 +103,9 @@ set spellsuggest=best,5
 set thesaurus=~/.vim/config/mthesaur.txt
 " set dictionary=/usr/share/dict/words
 
+" set formatprg=fmt\ --width=&textwidth
+set formatprg=fmt\ --width=74
+
 " j: remove comments when joining
 " l: don't break long lines in insert mode
 set formatoptions+=jl
@@ -123,7 +130,7 @@ set isfname-==
 
 set splitbelow   " nb ctrlp sets this
 set splitright
-set switchbuf=useopen,split
+set switchbuf=useopen " ,split
 set previewheight=18
 
 set nomodeline modelines=3
@@ -135,12 +142,6 @@ set nosol
 if $SSH_CLIENT != ''
     set clipboard=exclude:.*
 endif
-
-autocmd FileType qf setlocal wrap | nnoremap <silent> <buffer> q :q<cr>
-
-" matlab
-set path+=~/mlpackages
-" TODO: matlab don't spell comments?
 
 " use ag for grepping
 if executable('ag')
@@ -156,8 +157,10 @@ if exists(':Ag')
     nnoremap <leader>g :Ag 
 endif
 
-" opts
-let g:rc_disable_youcompleteme = 1
+" global opts
+let g:rc_disable_youcompleteme = 0
+
+" xxx move this
 if get(g:, 'rc_disable_youcompleteme', 0)
     let g:loaded_youcompleteme = 1
 endif
@@ -245,12 +248,12 @@ set shortmess+=I
 " }}}1
 
 " ────────────────────────────────────────────────────────────────────────
-"            __            _                      __  _
-"     ____  / /_  ______ _(_)___     ____  ____  / /_(_)___  ____  _____
-"    / __ \/ / / / / __ `/ / __ \   / __ \/ __ \/ __/ / __ \/ __ \/ ___/
-"   / /_/ / / /_/ / /_/ / / / / /  / /_/ / /_/ / /_/ / /_/ / / / (__  )
-"  / .___/_/\__,_/\__, /_/_/ /_/   \____/ .___/\__/_/\____/_/ /_/____/
-" /_/            /____/                /_/
+"             __            _                      __  _
+"      ____  / /_  ______ _(_)___     ____  ____  / /_(_)___  ____  _____
+"     / __ \/ / / / / __ `/ / __ \   / __ \/ __ \/ __/ / __ \/ __ \/ ___/
+"    / /_/ / / /_/ / /_/ / / / / /  / /_/ / /_/ / /_/ / /_/ / / / (__  )
+"   / .___/_/\__,_/\__, /_/_/ /_/   \____/ .___/\__/_/\____/_/ /_/____/
+"  /_/            /____/                /_/
 " ────────────────────────────────────────────────────────────────────────
 " plugin options {{{1
 
@@ -262,16 +265,59 @@ let g:vimtex_view_forward_search_on_start = 0
 let g:vimtex_imaps_leader = '`'
 let g:vimtex_indent_ignored_envs = ['document', 'aligned']
 
+" cleanup vimtex viewer windows
+" function VimtexCleanViewers()
+"     if !executable('xdotool') | return | endif
+
+"     let l:xwin_id = b:vimtex.viewer.xwin_id
+"     if !l:xwin_id | return | endif
+
+"     call system('xdotool windowclose '. l:xwin_id)
+" endfunction
+
+function! VimtexCleanViewers()
+    if !executable('xdotool') | return | endif
+
+    for l:b in range(1, bufnr('$'))
+        let l:vimtex = getbufvar(l:b, 'vimtex')
+        if empty(l:vimtex) | continue | endif
+
+        let l:xwin_id = l:vimtex.viewer.xwin_id
+        if !l:xwin_id | continue | endif
+
+        call system('xdotool windowclose '. l:xwin_id)
+    endfor
+endfunction
+
+augroup vimtex_cleanup
+    au!
+    au VimLeavePre * call VimtexCleanViewers()
+    " au User VimtexEventQuit call VimtexCleanViewers()
+    au User VimtexEventQuit echo 'vimtex quitting '.bufname('%') | sleep 400m
+augroup END
+
+" }}}2
+
+" unicode {{{2
+
+" (this is a typo in the plugin)
+nmap <sid>(unicode_un0) <plug>(UnicodeSwapCompleteName))
+nmap <sid>(unicode_un) <plug>(UnicodeSwapCompleteName)
+
 " }}}2
 
 " ultisnips {{{2
 let g:UltiSnipsSnippetDirectories=["ultisnips"]
-let g:UltiSnipsExpandTrigger='<sid>(snipexpand)'
+let g:UltiSnipsExpandTrigger='<c-z>'  " '<sid>(snipexpand)'
 let g:UltiSnipsListSnippets='<sid>(sniplist)'
-let g:UltiSnipsJumpForwardTrigger='<c-j>'
-let g:UltiSnipsJumpBackwardTrigger='<c-k>'
+let g:UltiSnipsJumpForwardTrigger='<c-f>'
+let g:UltiSnipsJumpBackwardTrigger='<c-b>'
+" let g:UltiSnipsJumpForwardTrigger='<c-j>'  
+" let g:UltiSnipsJumpBackwardTrigger='<c-k>'
 
-" TODO
+
+
+" TODO XXX
 function! UltiSnipsShim()
    call UltiSnips#ExpandSnippetOrJump()
    if get(g:,'ulti_expand_or_jump_res',0)
@@ -280,7 +326,7 @@ function! UltiSnipsShim()
       return 'hello'
    endif
 endfunction
-inoremap <c-]> <c-r>=UltiSnipsShim()<cr>
+" inoremap <c-]> <c-r>=UltiSnipsShim()<cr>
 
 " let g:UltiSnipsListSnippets
 
@@ -436,7 +482,7 @@ let g:airline_mode_map = {
       \ 'R'  : 'REPLACE',
       \ 'v'  : 'V',
       \ 'V'  : 'V-LINE',
-      \ 'c'  : 'CMD',
+      \ 'c'  : ':',
       \ '' : 'V-BLOCK',
       \ }
 
@@ -452,6 +498,7 @@ let g:airline_symbols.branch = ''
 let g:airline_symbols.readonly = '🔒'   " 
 let g:airline_symbols.linenr = '≡' " ♫'
 let g:airline_symbols.paste = '🐧'   	" hhp
+let g:airline_symbols.spell = 'S'   " 📝'
 let g:airline_symbols.whitespace = 'w'
 
 let g:airline_symbols.notexists = '*'
@@ -468,6 +515,7 @@ let g:airline#extensions#whitespace#enabled = 0
 let g:airline#extensions#bufferline#enabled = 0
 let g:airline#extensions#syntastic#enabled = 1
 let g:airline#extensions#tagbar#enabled = 1
+let g:airline#parts#ffenc#skip_expected_string='utf-8[unix]'
 
 " xxx
 " let g:airline#extensions#tagbar#flags = 'p'
@@ -479,6 +527,8 @@ let g:airline#extensions#vimtex#right = ")"
 
 let g:airline_section_error = ''  " temporary, to hide red arrow
 let g:airline_section_warning = ''
+let g:airline_detect_spelllang = 0
+
 " let g:airline_skip_empty_sections = 1
 
 " let spc = g:airline_symbols.space
@@ -522,6 +572,10 @@ let g:airline#extensions#windowswap#indicator_text = '👌' " 🍔 WS'
 let g:airline_section_z = airline#section#create(
     \ ['windowswap', 'thisway', 'linenr', 'maxlinenr', ' :%3v'])
 
+let g:airline#extensions#default#section_truncate_width = {
+   \ 'b': 75, 'x': 110, 'y': 88, 'z': 50, 
+   \ 'warning': 80, 'error': 80, }
+
 if 0
 
 
@@ -536,8 +590,8 @@ let g:airline_section_z = '%p%% %#__accent_bold#%l%#__restore__#:%2v'
 " let g:airline_section_warning = ''
 " let g:airline_section_gutter = ''
 
-let g:airline#extensions#default#section_truncate_width = {
-  \ 'b': 79, 'x': 60, 'y': 60, 'z': 45 }
+" let g:airline#extensions#default#section_truncate_width = {
+"   \ 'b': 79, 'x': 60, 'y': 60, 'z': 45 }
 
 " there is a base16_eighties theme but it maps normal mode to green
 " see https://github.com/vim-airline/vim-airline/issues/1067
@@ -551,20 +605,37 @@ endif
 " viewdoc {{{2
 " XXX
 let g:viewdoc_open = 'topleft new'
-let g:ViewDoc_tex = 'ViewDoc_help_custom' 
+" let g:ViewDoc_tex = 'ViewDoc_help_custom' 
 " let g:viewdoc_only = 1
 
 " default to ViewDocHelp!
 let g:no_viewdoc_abbrev = 1
+let g:no_viewdoc_maps = 1
+
+" cnoreabbrev <expr> h      getcmdtype()==':'
+"     \ && getcmdline()=='h'     ? 'ViewDocHelp!' : 'h'
+" cnoreabbrev <expr> help   getcmdtype()==':'
+"     \ && getcmdline()=='help'  ? 'ViewDocHelp!' : 'help'
+
+" function! s:Help(args)
+"         \ :<C-U>exe 'topleft help '.scriptease#helptopic()<CR>
+" endfunction
+" command! -nargs=* -complete=help Help call <SID>smart_help(<q-args>)
+" todo :let @/ =
+
+
 cnoreabbrev <expr> h      getcmdtype()==':'
-    \ && getcmdline()=='h'     ? 'ViewDocHelp!' : 'h'
+    \ && getcmdline()=='h'     ? 'topleft help' : 'h'
 cnoreabbrev <expr> help   getcmdtype()==':'
-    \ && getcmdline()=='help'  ? 'ViewDocHelp!' : 'help'
+    \ && getcmdline()=='help'  ? 'topleft help' : 'help'
 
 "}}}2
 
 " quickscope {{{2
 let g:qs_highlight_on_keys = ['f', 'F', 't', 'T']
+
+let g:qs_second_occurrence_highlight_color_gui = '#f4e541'
+let g:qs_first_occurrence_highlight_color_gui = '#41f468'
 
 "}}}2
 "
@@ -645,6 +716,12 @@ let g:vimtex_delim_list.mods.name = [
       \ ['\biggl', '\biggr'],
       \ ['\Biggl', '\Biggr'],
       \]
+let g:vimtex_delim_toggle_mod_list = [
+      \ ['\bigl', '\bigr'],
+      \ ['\Bigl', '\Bigr'],
+      \ ['\biggl', '\biggr'],
+      \ ['\Biggl', '\Biggr'],
+      \]
 
 let g:vimtex_compiler_latexmk = {
     \   'backend'    : 'jobs',
@@ -652,6 +729,21 @@ let g:vimtex_compiler_latexmk = {
     \   'continuous' : 0, 
     \   'callback'   : 0
     \}
+
+" xxx make tex <buffer> only!
+" nnoremap <silent> <plug>(vimtex-delim-toggle-modifier-reverse)
+"     \ :call vimtex#delim#toggle_modifier(-1)<cr>
+
+nmap <silent> <leader>l.  :<c-u>lcd <c-r>=b:vimtex.root<cr><cr>:pwd<cr>
+nmap <silent> <leader>lg.  :<c-u>cd <c-r>=b:vimtex.root<cr><cr>:pwd<cr>
+
+nmap <silent> cd <plug>(vimtex-delim-toggle-modifier)
+nmap <silent> cD <plug>(vimtex-delim-toggle-modifier-reverse)
+xmap <silent> cd <plug>(vimtex-delim-toggle-modifier)
+xmap <silent> cD <plug>(vimtex-delim-toggle-modifier-reverse)
+nmap <silent> cse* <plug>(vimtex-env-toggle-star)
+nmap <silent> csc* <plug>(vimtex-cmd-toggle-star)
+" alternative maps cd, cD, co, cO, csd+/-
 
 let g:vimtex_view_automatic = 0
 let g:vimtex_view_method = 'zathura'
@@ -714,8 +806,11 @@ let g:ycm_semantic_triggers.tex = [
     \ 're!\\[A-Za-z]*',
     \ ]
 
+" let g:ycm_min_num_of_chars_for_completion = 99
+" let g:ycm_cache_omnifunc = 0
+
 let g:ycm_semantic_triggers.text = [
-    \ 're!:\w',
+    \ 're!:[A-Za-z]*',
     \ ]
 
 let g:ycm_key_invoke_completion = '<f19>'
@@ -752,6 +847,8 @@ let g:ycm_global_ycm_extra_conf = '~/.vim/.ycm_extra_conf.py'
 " CompleteDone
 " set completefunc=emoji#complete
 
+let g:ycm_autoclose_preview_window_after_completion = 1
+
 let g:ycm_filetype_blacklist = {
     \ 'tagbar'   : 1,
     \ 'qf'       : 1,
@@ -763,6 +860,7 @@ let g:ycm_filetype_blacklist = {
     \ 'infolog'  : 1,
     \ 'mail'     : 1,
     \ 'netrw'    : 1,
+    \ 'css'      : 1,
     \ }
 
 " CtrlP {{{2
@@ -894,11 +992,14 @@ let g:secure_modelines_allowed_items = [
     \ ]
 
 function! FixSwTs()
-    " echo 'FixSwTs'
-    if &shiftwidth > 0
-        let &tabstop = &shiftwidth
-        let &shiftwidth=0
-    endif
+    " echo 'FixSwTs' &shiftwidth
+    " if &shiftwidth > 0
+    "     let &tabstop = &shiftwidth
+    "     let &shiftwidth=0
+    " endif
+    " XXX
+    echo 'fixswts'
+    let &tabstop = &shiftwidth
 endfunction
 
 
@@ -908,9 +1009,14 @@ endfunction
 " au BufRead * echo 'BufRead '.&shiftwidth | sleep 1
 " au BufEnter * call FixSwTs()
 
-au BufRead * call FixSwTs()
+" au BufRead * call FixSwTs()
+" au BufEnter * call FixSwTs()
 
 " need to use BufEnter or BufReadEnter for overrides
+
+" narrow region
+let g:nrrw_rgn_nomap_nr = 1
+let g:nrrw_rgn_nomap_Nr = 1
 
 " }}}1
 
@@ -934,6 +1040,7 @@ au BufRead * call FixSwTs()
 
 
 " insert-mode expansion is performed with ctrl-]
+" mnemonic: ending ]
 let g:user_expansion_chain = [
          \ 's:ExpandSnippet', 
          \ 's:ExpandEmoji', 
@@ -976,7 +1083,7 @@ endfunction
 imap <sid>(expansion) <c-r>=<sid>DoExpansion()<cr>
 
 " <c-r>=UltiSnipsShim()<cr>
-imap <F7> <sid>(expansion)
+imap <c-]> <sid>(expansion)
 
 " function! FFF()
 "    return mode()
@@ -1002,9 +1109,9 @@ command! ReloadVimrc source $MYVIMRC | redraw | echo $MYVIMRC.' reloaded'
 " check for a shebang line and set up to execute
 function! SetShebangRun()
     if executable(expand('%:p')) && getline(1) =~# '^#!'
-        nnoremap <silent> <buffer> <leader><bslash>
+        nnoremap <silent><buffer> <leader><bslash>
             \ :<C-U>up<CR>:execute "!" . expand("%:p:S")<CR>
-        nnoremap <silent> <buffer> <F5>
+        nnoremap <silent><buffer> <F5>
             \ :<C-U>up<CR>:execute "!" . expand("%:p:S")<CR>
     endif
 endfunction
@@ -1012,6 +1119,7 @@ endfunction
 " displays a list of figlet fonts
 function! s:FigPickerMode() range
     echo 'range = ' . a:firstline . ',' . a:lastline
+    " let l:orig_text = @"
 
     let figfontwinnr = bufwinnr('__Figpicker__')
     if figfontwinnr != -1
@@ -1029,8 +1137,8 @@ function! s:FigPickerMode() range
     :g/in this direc/d
     silent execute ':/' . g:figletFont
     try
-        nnoremap <silent> <buffer> <esc> :wincmd c<cr>
-        nnoremap <silent> <buffer> q :wincmd c<cr>
+        nnoremap <silent> <buffer> <esc> :<c-u>bd<cr>
+        nnoremap <silent> <buffer> q :<c-u>bd<cr>
         nnoremap <silent> <buffer> 
             \ <cr> ^y$:let g:figletFont='<c-r>"'<cr><c-w>p
         nnoremap <buffer>
@@ -1039,12 +1147,9 @@ function! s:FigPickerMode() range
     setl nomodifiable nomodified
 endfunction
 
+command! -range -nargs=0 FigPick call <sid>FigPickerMode()
 
 " toggle syntastic passive mode
-
-
-command! -nargs=0 FigPick call <sid>FigPickerMode()
-
 function! SyntaxToggle()
     execute 'SyntasticToggleMode'
     if g:syntastic_mode_map['mode'] ==? 'active'
@@ -1080,10 +1185,21 @@ function! s:ScratchCmd(command, ...)
    0
 endfunction
 
-command! -nargs=? Scriptnames call <sid>ScratchCmd('scriptnames', <f-args>)
+command! -nargs=? ScriptnamesBuf call <sid>ScratchCmd('scriptnames', <f-args>)
 command! -nargs=+ ScratchCommand call <sid>ScratchCmd(<f-args>)
 
-
+" function! vimtex#util#command(cmd)
+"   let l:a = @a
+"   try
+"     silent! redir @a
+"     silent! execute a:cmd
+"     redir END
+"   finally
+"     let l:res = @a
+"     let @a = l:a
+"     return split(l:res, "\n")
+"   endtry
+" endfunction
 
 " helper for control P to open file in preview window
 function! PreviewFile(action, line)
@@ -1201,7 +1317,7 @@ function! FoldText()
     let l:left = '[ ' . l:line . ' '
     let l:right = ' ' . l:foldSizeStr . ' '
         \ . l:foldLevelStr . ' ' . l:foldPerc . ' ]'
-    let l:width = (&textwidth > 0 ? &textwidth : 75)
+    let l:width = (&textwidth > 0 ? &textwidth : 74)
     let l:expansionString = repeat('·', 
         \ l:width - strwidth(l:left . l:right))
     return l:left . l:expansionString . l:right
@@ -1302,6 +1418,27 @@ function! RefreshAppearance()
    endif
 endfunction
 
+"
+function! ClearRegisters()
+    let l:regs = 'abcdefghijklmnopqrstuvwxyz0123456789*+-'
+    for l:r in split(l:regs, '\zs')
+        call setreg(l:r, [])
+    endfor
+endfunction
+
+" requires mtth/vim-scratch XXX WIP
+function! ScratchRegister()
+    call scratch#open(1)
+    exe '0put!'
+    " exe '$delete _'
+    augroup ScratchRegisterLeave
+        autocmd!
+        exe 'autocmd WinLeave <buffer='. bufnr('%') . '> %yank'
+    augroup END
+endfunction
+
+let g:scratch_autohide = 1
+
 " }}}1
 
 " ────────────────────────────────────────────────────────────────────────
@@ -1313,6 +1450,40 @@ endfunction
 "                      /____/_/                 
 " ────────────────────────────────────────────────────────────────────────
 " file types {{{1
+
+" help
+function! s:rc_filetype_help_maps()
+    nnoremap <silent><buffer> q :<c-u>bd<cr>
+    nnoremap <silent><buffer> K
+        \ :<c-u>exe 'topleft help '.scriptease#helptopic()<cr>
+endfunction
+augroup rc_filetype_help
+    au!
+    autocmd FileType help if &buftype == 'help'
+        \ | call s:rc_filetype_help_maps() | endif
+augroup END
+
+" matlab
+augroup rc_filetype_matlab
+    au!
+    autocmd FileType matlab setlocal path+=~/mlpackages
+        \ path+=/opt/MATLAB/R2017a/toolbox/matlab/**
+        \ commentstring=%\ %s
+augroup END
+
+" quickfix
+augroup rc_filetype_qf
+    au!
+    autocmd FileType qf setlocal wrap textwidth=0 nospell
+    autocmd FileType qf nnoremap <silent><buffer> q :<c-u>bd<cr>
+augroup END
+    
+" vim
+augroup rc_filetype_vim
+    au!
+    autocmd FileType vim nnoremap <silent><buffer> K
+        \ :<C-U>exe 'topleft help '.scriptease#helptopic()<CR>
+augroup END
 
 " }}}1
 
@@ -1352,8 +1523,8 @@ nmap  yp <Plug>unimpairedPastea
 nmap  yP <Plug>unimpairedPastei
 
 " enable/disable folding
-nnoremap [of :setlocal foldenable<cr>
-nnoremap ]of :setlocal nofoldenable<cr>
+" nnoremap [of :setlocal foldenable<cr>
+" nnoremap ]of :setlocal nofoldenable<cr>
 
 " latex stuff
 " nnoremap <silent> <leader>lx :<C-U>call SetXeTex()<CR>
@@ -1372,6 +1543,7 @@ nnoremap <silent> gy :set operatorfunc=FigOper<cr>g@
 nnoremap <silent> gyy :.Figlet<cr>
 vnoremap <silent> gy :Figlet<cr>
 nnoremap <silent> gY :call <sid>FigPickerMode()<cr>
+" XXX better n/vmap for fig picker mode
 
 " show syntax under cursor
 nnoremap gb :call SyntaxAttr()<cr>
@@ -1379,6 +1551,7 @@ nnoremap gB :echo "hi<"
     \ . synIDattr(synID(line("."),col("."),1),"name") . '> trans<'
     \ . synIDattr(synID(line("."),col("."),0),"name") . "> lo<"
     \ . synIDattr(synIDtrans(synID(line("."),col("."),1)),"name") . ">"<CR>
+nnoremap g<c-b> <plug>HiLinkTrace
 
 " free keys xxx
 " gb show syntax
@@ -1417,9 +1590,6 @@ augroup END
         \ :<C-U>@*<CR>:echo (1+line("'>")-line("'<")).' lines sourced'<CR>
 
 
-" matlab
-autocmd FileType matlab setlocal commentstring=%\ %s
-" setl path+=/opt/MATLAB/R2017a/toolbox/matlab/**
 
 " TODO: use makeprg for these?
 " xxx
@@ -1502,11 +1672,11 @@ cnoremap <c-x> <s-left>
 cnoremap <c-o> <s-right>
 
 " XXX considered harmful?
-set <f20>=b
-cnoremap <f20> <s-left>
+set <a-b>=b
+cnoremap <a-b> <s-left>
 
-set <f21>=f
-cnoremap <f21> <s-right>
+set <a-f>=f
+cnoremap <a-f> <s-right>
 
 " vdebug
 nnoremap <Leader>x :<C-U>VdebugEval 
@@ -1573,7 +1743,32 @@ nmap <silent> <leader>f :<C-U>call CtrlPCursorFile()<CR>
 " increment/decrement
 set nrformats+=alpha
 
-" these can be repeated with '.' so don't need to be easy to hit
+" bootleq/vim-cycle
+let g:cycle_no_mappings = 1
+nmap <leader><c-a> <Plug>CycleNext
+nmap <leader><c-x> <Plug>CyclePrev
+let g:cycle_default_groups_for_tex = [
+    \   [[ '[\big]', '[\Big]', '[\bigg]', '[\Bigg]' ], 
+        \ 'match_case', 'hard_case'],
+    \ ]
+
+" AndrewRadev/switch.vim
+let g:switch_mapping = ''
+let g:switch_custom_definitions = [
+    \   { '\(\w\)\(\[[bB]ig\{1,2}\]\)\({\)': '\1\3' },
+    \ ]
+
+
+
+    " \   [['\big\l:\big\r', '\Big\l:\Big\r', '\bigg\l:\bigg\r', 
+    "     \ '\Bigg\l:\Bigg\r'], 'sub_pairs', 'hard_case', 'match_case'],
+    " \ ]
+
+" function! KonsoleSetBg(hex)
+"     call system("/home/andy/script/bgchange.sh 292D3E")
+" endfunction
+
+" these can be repeated with '.' so don't really need to be easy to hit
 nnoremap <leader>, <c-x>
 vnoremap <leader>, <c-x>
 vnoremap g<leader>, g<c-x>
@@ -1581,12 +1776,105 @@ nnoremap <leader>; <c-a>
 vnoremap <leader>; <c-a>
 vnoremap g<leader>; g<c-a>
 
+nnoremap <silent> <plug>(tex-opt-incr) :<c-u>call TexOptionIncrement(1)<cr>
+nnoremap <silent> <plug>(tex-opt-decr) :<c-u>call TexOptionIncrement(-1)<cr>
+nmap <silent> co <plug>(tex-opt-incr)
+nmap <silent> cO <plug>(tex-opt-decr)
+
 " nnoremap <c-k> <c-a>
 " nnoremap <c-j> <c-x>
 " vnoremap <c-k> <c-a>
 " vnoremap <c-j> <c-x>
 " vnoremap g<c-k> g<c-a>
 " vnoremap g<c-j> g<c-x>
+
+" tex increment option ('' = \relax)
+let g:tex_big_list = [ '', '\big', '\Big', '\bigg', '\Bigg' ]
+function! TexOptionIncrement(dir)
+    let l:cur = vimtex#cmd#get_current()
+    if empty(l:cur) | return 0 | endif
+
+    " handles the case where cursor is on [\big]
+    if index(g:tex_big_list, l:cur.text) >= 0
+        let l:cur = vimtex#cmd#get_at([l:cur.pos_end.lnum, 
+            \ l:cur.pos_end.cnum+1])
+        if empty(l:cur) | return 0 | endif
+    endif
+
+    let l:direction = a:dir < 0 ? -v:count1 : v:count1
+
+    " if already has [something]
+    if !empty(l:cur.opt)
+        let l:opttext = substitute(l:cur.opt.text, '\s\+$', '', '')
+        let l:idx = index(g:tex_big_list, l:opttext)
+        if l:idx < 0 | return 0 | endif
+
+        let l:idx2 = (l:idx+l:direction) % len(g:tex_big_list)
+        let l:new = g:tex_big_list[l:idx2]
+
+        let l:start = l:cur.opt.open.cnum
+        let l:end = l:cur.opt.close.cnum-1
+
+        if !strlen(l:new)
+            let l:start -= 1
+            let l:end += 1
+        endif
+    else
+        let l:idx2 = (0+l:direction) % len(g:tex_big_list)
+        let l:new = l:idx2 > 0 ? '['.g:tex_big_list[l:idx2].']' : ''
+        let l:start = len(l:cur.args) ? l:cur.args[0].open.cnum-1
+            \ : l:cur.pos_end.cnum
+        let l:end = l:start
+    endif
+
+    let l:pos = getcurpos()
+    let l:line = getline('.')
+    let l:before_text = strpart(l:line,0,l:start)
+    let l:after_text = strpart(l:line,l:end)
+    silent call setline('.',l:before_text.l:new.l:after_text)
+    call setpos("'[",[0,line('.'),strlen(l:before_text)+1,0])
+    call setpos("']",[0,line('.'),l:start+strlen(l:new),0])
+
+    if l:pos[2] > l:start
+        let l:newcol = l:pos[2] + strlen(l:new) - (l:end - l:start)
+        let l:pos[2] = max([l:start, l:newcol])
+        let l:pos[4] = l:pos[2]
+        call setpos('.', l:pos)
+    endif
+
+    silent! call repeat#set("\<plug>".'(tex-opt-'
+        \ .(a:dir < 0 ? 'decr' : 'incr').')', v:count)
+
+    return 1
+endfunction
+
+" function s:SID()
+"     return matchstr(expand('<sfile>'), '<SNR>\zs\d\+\ze_SID$')
+" endfun
+
+" function! WordIncrement(direction)
+"     let l:pat = '\V'.escape(join(
+"         \ map(g:tex_big_list, 'v.val."d"'), '\|'), '\')
+
+"     let l:line = getline('.')
+"     let l:start = 0
+"     while l:start >= 0 
+"         let l:match = matchstrpos(l:line, l:pat, l:start)
+"         let l:curp = col('.') + (mode() == 'i' ? -1 : 0)
+"         if l:curp > l:match[1] && l:curp <= l:match[2]
+"             let idx = index(match[0], "the")
+"         endif
+
+"         let l:start = l:match[2]
+"    endwhile
+
+"    let l:before_text = strpart(l:line,0,l:start)
+"    let l:after_text = strpart(l:line,l:end)
+"    silent call setline('.',l:before_text.l:new.l:after_text)
+"    call setpos("'[",[0,line('.'),strlen(l:before_text)+1,0])
+"    call setpos("']",[0,line('.'),l:start+strlen(l:new),0])
+" endfunction
+
 
 " shortcut to repeat macro (this is also control-space)
 nnoremap <c-@> @@
@@ -1803,15 +2091,91 @@ let g:windowswap_map_keys = 0
 " nnoremap <c-w>m :call WindowSwap#MarkWindowSwap()<CR>
 " nnoremap <c-w>' :call WindowSwap#DoWindowSwap()<CR>
 
+" see airline extension for windowing
 
-" see airline extension
+" comma join
+nnoremap <silent> <leader>J :Join ', '<cr>
+vnoremap <silent> <leader>J :Join ', '<cr>
+
+" zero-paste: convert register to character-wise
+function! ZeroPaste(p)
+    call setreg(v:register, getreg(v:register), 'c')
+    exe 'normal '.v:register.a:p
+endfunction
+nnoremap zp :<c-u>call ZeroPaste('p')<cr>
+nnoremap zP :<c-u>call ZeroPaste('P')<cr>
+
+" change-paste: like visual paste but preserves " register
+" usually want cpw/cpiw 
+" the previous text goes into the "- register
+" repeat already works
+function! ChangePasteOp(motionType)
+    let l:save = @"
+    normal! `[v`]p
+    if v:register == '"'
+        let @" = l:save
+    endif
+endfunction
+
+nnoremap <silent> cp :set operatorfunc=ChangePasteOp<cr>g@
+" special case like cw
+nmap <silent> cpw cpe
+
+" vinegar
+nmap <leader>- <Plug>VinegarSplitUp
+
+" do not let vinegar override this map 
+" nnoremap - -
+
+" vimtex end-wise style end complete (xxx move)
+imap <c-x><cr> <plug>(vimtex-delim-close)
+
+" iabbr <expr> ]] vimtex#delim#close()
+" imap <f26> <plug>(vimtex-delim-close)
+
+" todo
+" ViewDocWrapper preserve registers
+" ViewDoc for other file types
+
+" a somewhat more useful go-to-middle of text
+nnoremap <silent> gm :exe 'normal '.float2nr(&tw/2).'\|'<cr>
+nnoremap <silent> gM gm
 
 " }}}1
 
-" xxx s:init code
-
 " final setup
 call SiteSetupPost()
+
+function! FixIndents()
+    call SecureModelines_DoModelines()
+    echo &et &ts &sw &sts &sta
+endfunction
+
+function! s:init()
+    call SiteEnter()
+
+    " add a hook to securemodelines
+    if get(g:, 'loaded_securemodelines', 0)
+        augroup SecureModeLines
+            au!
+            " au BufRead,StdinReadPost * call FixIndents()
+        augroup END
+    endif
+
+    " override vim-vinegar's default map
+    if get(g:, 'loaded_vinegar', 0) && maparg('-', 'n') != ''
+        unmap -
+    endif
+
+    " XXX testing
+   let g:latex_to_unicode_suggestions = 1
+endfunction
+
+if v:vim_did_enter
+    call s:init()
+else
+    au VimEnter * call s:init()
+endif
 
 set secure
 
