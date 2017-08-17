@@ -24,7 +24,7 @@
 " \e
 " \f            CtrlP to file under cursor
 " \g            :Ag prompt
-" \G            Ag file under cursor
+" \G            Ag search for word under cursor
 " \h
 " \i            YcmDiagnostic (TODO)
 " \j
@@ -76,6 +76,7 @@
 "   - fmt equalprg vs q
 "   - help abbr
 "   - look into cycle/switch
+"   - clipbrd/tregisters
 
 " }}}1
 
@@ -153,11 +154,14 @@ if executable('ag')
 endif
 
 if exists(':Ag')
-    nnoremap <leader>G :Ag -Q <c-r>=escape(shellescape(expand("<cword>"),1),'\|#%')<cr><cr>
+    function! s:Ag_cword()  " XXX this doesn't actually work..
+        return escape(shellescape(expand("<cword>"),1),'\|#%')
+    endfunction
+    nnoremap <leader>G :Ag -Q <c-r>=<sid>Ag_cword()<cr><cr>
     nnoremap <leader>g :Ag 
 endif
 
-" global opts
+" global rc options
 let g:rc_disable_youcompleteme = 0
 
 " xxx move this
@@ -189,6 +193,11 @@ exec 'source' g:site_config
 "  /_/            /____/
 " ────────────────────────────────────────────────────────────────────────
 " plugins {{{1
+
+augroup rc_pre_filetype_plugin
+    autocmd!
+    autocmd FileType * call s:PreFTPlugin(expand("<amatch>"))
+augroup END
 
 " ~/.vim/config/plugs.vim
 execute 'source' g:config_home.'/plugs.vim'
@@ -257,44 +266,9 @@ set shortmess+=I
 " ────────────────────────────────────────────────────────────────────────
 " plugin options {{{1
 
-" vimtex {{{2
-
-" autocmd FileType tex :iabbr <buffer> ... \dots
-
-let g:vimtex_view_forward_search_on_start = 0
-let g:vimtex_imaps_leader = '`'
-let g:vimtex_indent_ignored_envs = ['document', 'aligned']
-
-" cleanup vimtex viewer windows
-" function VimtexCleanViewers()
-"     if !executable('xdotool') | return | endif
-
-"     let l:xwin_id = b:vimtex.viewer.xwin_id
-"     if !l:xwin_id | return | endif
-
-"     call system('xdotool windowclose '. l:xwin_id)
-" endfunction
-
-function! VimtexCleanViewers()
-    if !executable('xdotool') | return | endif
-
-    for l:b in range(1, bufnr('$'))
-        let l:vimtex = getbufvar(l:b, 'vimtex')
-        if empty(l:vimtex) | continue | endif
-
-        let l:xwin_id = l:vimtex.viewer.xwin_id
-        if !l:xwin_id | continue | endif
-
-        call system('xdotool windowclose '. l:xwin_id)
-    endfor
-endfunction
-
-augroup vimtex_cleanup
-    au!
-    au VimLeavePre * call VimtexCleanViewers()
-    " au User VimtexEventQuit call VimtexCleanViewers()
-    au User VimtexEventQuit echo 'vimtex quitting '.bufname('%') | sleep 400m
-augroup END
+" clipbrd {{{2
+"
+let g:no_clipbrd_maps = 1
 
 " }}}2
 
@@ -303,6 +277,20 @@ augroup END
 " (this is a typo in the plugin)
 nmap <sid>(unicode_un0) <plug>(UnicodeSwapCompleteName))
 nmap <sid>(unicode_un) <plug>(UnicodeSwapCompleteName)
+
+" }}}2
+
+" unicoder {{{2
+
+let g:unicoder_cancel_normal = 1
+let g:unicoder_cancel_insert = 1
+let g:unicoder_cancel_visual = 1
+let g:unicoder_no_map = 1
+
+" XXX todo
+" nnoremap <C-l> :call unicoder#start(0)<CR>
+" inoremap <C-l> <Esc>:call unicoder#start(1)<CR>
+" vnoremap <C-l> :<C-u>call unicoder#selection()<CR>
 
 " }}}2
 
@@ -334,6 +322,50 @@ endfunction
     " \ 'leader' : 0, 
  
 " }}}2
+
+" vimtex {{{2
+
+" autocmd FileType tex :iabbr <buffer> ... \dots
+
+let g:vimtex_view_forward_search_on_start = 0
+let g:vimtex_imaps_leader = '`'
+autocmd FileType tex imap <silent><buffer> `` ``
+let g:vimtex_indent_ignored_envs = ['document', 'aligned']
+
+" cleanup vimtex viewer windows
+" function VimtexCleanViewers()
+"     if !executable('xdotool') | return | endif
+
+"     let l:xwin_id = b:vimtex.viewer.xwin_id
+"     if !l:xwin_id | return | endif
+
+"     call system('xdotool windowclose '. l:xwin_id)
+" endfunction
+
+function! VimtexCleanViewers()
+    if !executable('xdotool') | return | endif
+
+    for l:b in range(1, bufnr('$'))
+        let l:vimtex = getbufvar(l:b, 'vimtex')
+        if empty(l:vimtex) | continue | endif
+
+        let l:xwin_id = l:vimtex.viewer.xwin_id
+        if !l:xwin_id | continue | endif
+
+        call system('xdotool windowclose '. l:xwin_id)
+    endfor
+endfunction
+
+augroup vimtex_cleanup
+    au!
+    au VimLeavePre * call VimtexCleanViewers()
+    " au User VimtexEventQuit call VimtexCleanViewers()
+    au User VimtexEventQuit echo 'vimtex quitting '.bufname('%').'|'.b:vimtex_id | sleep 400m
+augroup END
+
+" }}}2
+
+
 
 " call vimtex#imaps#add_map({
 "     \ 'lhs' : 'test',
@@ -456,23 +488,6 @@ call SiteSetupAppearance()
 " for f in glob(g:config_home.'/site.'.hostname().'.vim', 1, 1)
 "     exec 'source' f
 " endfor
-
-" gutentags {{{2
-let g:gutentags_project_root = [ 'latexmkrc' ]
-let g:gutentags_generate_on_missing = 0
-let g:gutentags_generate_on_new = 0
-let g:gutentags_generate_on_write = 1
-let g:gutentags_cache_dir = '/home/andy/.cache/gutentags'
-
-" let g:gutentags_ctags_tagfile
-" let g:gutentags_project_root = ['tags'] 
-" let g:gutentags_add_default_project_roots = 0
-"}}}2
-
-" netrw/vim-vinegar {{{2
-let g:netrw_list_hide = '\(^\|\s\s\)\zs\.\S\+'
-"}}}2
-
 
 " airline {{{2
 let g:airline_mode_map = {
@@ -602,6 +617,23 @@ endif
 
 " }}}2
 
+" gutentags {{{2
+let g:gutentags_project_root = [ 'latexmkrc' ]
+let g:gutentags_generate_on_missing = 0
+let g:gutentags_generate_on_new = 0
+let g:gutentags_generate_on_write = 1
+let g:gutentags_cache_dir = '/home/andy/.cache/gutentags'
+
+" let g:gutentags_ctags_tagfile
+" let g:gutentags_project_root = ['tags'] 
+" let g:gutentags_add_default_project_roots = 0
+"}}}2
+
+" netrw/vim-vinegar {{{2
+let g:netrw_list_hide = '\(^\|\s\s\)\zs\.\S\+'
+let g:netrw_altv = 1
+"}}}2
+
 " viewdoc {{{2
 " XXX
 let g:viewdoc_open = 'topleft new'
@@ -624,6 +656,7 @@ let g:no_viewdoc_maps = 1
 " todo :let @/ =
 
 
+" XXX leftabove instead
 cnoreabbrev <expr> h      getcmdtype()==':'
     \ && getcmdline()=='h'     ? 'topleft help' : 'h'
 cnoreabbrev <expr> help   getcmdtype()==':'
@@ -638,10 +671,7 @@ let g:qs_second_occurrence_highlight_color_gui = '#f4e541'
 let g:qs_first_occurrence_highlight_color_gui = '#41f468'
 
 "}}}2
-"
-" latex / latex-suite (vimlatex)
-" autocmd FileType tex setlocal iskeyword+=:
-autocmd FileType tex setlocal iskeyword-=\
+
 
 let g:Tex_Leader2='<C-\>'
 
@@ -707,7 +737,7 @@ let g:vdebug_keymap = {
 
 
 " vimtex
-let g:vimtex_delim_list = {'mods' : {}}
+let g:vimtex_delim_list = {'mods' : {}, 'delim_tex': {}}
 let g:vimtex_delim_list.mods.name = [
       \ ['\left', '\right'],
       \ ['\mleft', '\mright'],
@@ -721,6 +751,13 @@ let g:vimtex_delim_toggle_mod_list = [
       \ ['\Bigl', '\Bigr'],
       \ ['\biggl', '\biggr'],
       \ ['\Biggl', '\Biggr'],
+      \]
+
+let g:vimtex_delim_list.delim_tex.name = [
+      \ ['[', ']'],
+      \ ['{', '}'],
+      \ ['``', "''"],
+      \ ['`', "'"],
       \]
 
 let g:vimtex_compiler_latexmk = {
@@ -842,10 +879,12 @@ endfunction
 "     \ 're!:arrow',
 "     \ ]
 
-let g:ycm_global_ycm_extra_conf = '~/.vim/.ycm_extra_conf.py'  
-
 " CompleteDone
 " set completefunc=emoji#complete
+
+" youcompleteme {{{2
+
+let g:ycm_global_ycm_extra_conf = '~/.vim/.ycm_extra_conf.py'
 
 let g:ycm_autoclose_preview_window_after_completion = 1
 
@@ -862,6 +901,8 @@ let g:ycm_filetype_blacklist = {
     \ 'netrw'    : 1,
     \ 'css'      : 1,
     \ }
+
+" }}}2
 
 " CtrlP {{{2
 let g:ctrlp_extensions = [ 'tag', 'quickfix' ]
@@ -951,6 +992,8 @@ let g:figletFont='slant'
 " echo g:loaded_syntastic_util_autoload
 " echo &runtimepath
 
+" syntastic {{{2
+
 " chktex is a bit too noisy
 let g:syntastic_tex_checkers = ['lacheck']  " , 'chktex']
 let g:syntastic_vim_checkers = ['vint']
@@ -965,7 +1008,10 @@ let g:syntastic_mode_map = {
     \ "mode" : "passive",
     \ }
 
+" XXX get mlint working
 "    \ "passive_filetypes" : [ "matlab" ] }
+
+" }}}2
 
 " latex-to-unicode provided by the julia plugin
 " let g:latex_to_unicode_file_types = ".*" = ["tex"]
@@ -1014,9 +1060,12 @@ endfunction
 
 " need to use BufEnter or BufReadEnter for overrides
 
-" narrow region
+" narrow region {{{2
+
 let g:nrrw_rgn_nomap_nr = 1
 let g:nrrw_rgn_nomap_Nr = 1
+
+" }}} 2
 
 " }}}1
 
@@ -1033,11 +1082,14 @@ let g:nrrw_rgn_nomap_Nr = 1
 " I use youcompleteme, so only the omnifunc is relevant
 
 
+inoremap <silent> <expr> <c-u> pumvisible() ? "\<pageup>"   : "\<c-u>"
+inoremap <silent> <expr> <c-d> pumvisible() ? "\<pagedown>" : "\<c-d>"
+
 
 " explicit completion is performed with ctrl-L
 
 
-
+" TODO expansion patterns
 
 " insert-mode expansion is performed with ctrl-]
 " mnemonic: ending ]
@@ -1118,7 +1170,7 @@ endfunction
 
 " displays a list of figlet fonts
 function! s:FigPickerMode() range
-    echo 'range = ' . a:firstline . ',' . a:lastline
+    " echo 'range = ' . a:firstline . ',' . a:lastline
     " let l:orig_text = @"
 
     let figfontwinnr = bufwinnr('__Figpicker__')
@@ -1141,13 +1193,15 @@ function! s:FigPickerMode() range
         nnoremap <silent> <buffer> q :<c-u>bd<cr>
         nnoremap <silent> <buffer> 
             \ <cr> ^y$:let g:figletFont='<c-r>"'<cr><c-w>p
-        nnoremap <buffer>
-            \ <space> :let g:figletFont='<c-r>=getline('.')<cr>'<cr><c-w>p:Figlet
+        " nnoremap <buffer>
+        "     \ <space> :let g:figletFont='<c-r>=getline('.')<cr>'<cr><c-w>p:Figlet
+        nnoremap <buffer> <space>
+            \ :let g:figletFont='<c-r>=getline('.')<cr>'<cr>
     endtry
     setl nomodifiable nomodified
 endfunction
 
-command! -range -nargs=0 FigPick call <sid>FigPickerMode()
+command! -range -nargs=0 FigPick <line1>,<line2>call <sid>FigPickerMode()
 
 " toggle syntastic passive mode
 function! SyntaxToggle()
@@ -1180,13 +1234,13 @@ function! s:ScratchCmd(command, ...)
       %substitute#^[[:space:]]*[[:digit:]]\+:[[:space:]]*##e
    endif
    silent %substitute/\%^\_s*\n\|\_s*\%$
-   let height = line('$') + 3
+   let height = min([line('$') + 3, 10])
    execute 'normal! z'.height."\<cr>"
    0
 endfunction
 
-command! -nargs=? ScriptnamesBuf call <sid>ScratchCmd('scriptnames', <f-args>)
-command! -nargs=+ ScratchCommand call <sid>ScratchCmd(<f-args>)
+command! -nargs=? ScriptnamesBuffer silent call <sid>ScratchCmd('scriptnames', <f-args>)
+command! -nargs=+ ScratchCommand silent call <sid>ScratchCmd(<q-args>)
 
 " function! vimtex#util#command(cmd)
 "   let l:a = @a
@@ -1419,12 +1473,13 @@ function! RefreshAppearance()
 endfunction
 
 "
-function! ClearRegisters()
+function! s:ClearRegisters()
     let l:regs = 'abcdefghijklmnopqrstuvwxyz0123456789*+-'
     for l:r in split(l:regs, '\zs')
         call setreg(l:r, [])
     endfor
 endfunction
+command! ClearRegisters call s:ClearRegisters()
 
 " requires mtth/vim-scratch XXX WIP
 function! ScratchRegister()
@@ -1451,6 +1506,15 @@ let g:scratch_autohide = 1
 " ────────────────────────────────────────────────────────────────────────
 " file types {{{1
 
+" this is called before ftplugin stuff so custom maps 
+" can be defined on a per file type basis before plugins
+function! s:PreFTPlugin(ft)
+    let l:au = 'PreFileType_'.a:ft
+    if exists('#User#'.l:au)
+        exe 'doautocmd User '.l:au
+    endif
+endfunction
+
 " help
 function! s:rc_filetype_help_maps()
     nnoremap <silent><buffer> q :<c-u>bd<cr>
@@ -1461,6 +1525,33 @@ augroup rc_filetype_help
     au!
     autocmd FileType help if &buftype == 'help'
         \ | call s:rc_filetype_help_maps() | endif
+augroup END
+
+" latex
+function! s:rc_filetype_tex_maps()
+    " vimtex end-wise style end completion
+    imap <silent><buffer> <c-x><cr> <plug>(vimtex-delim-close)
+
+    " shift-return alternative: xxx experimental
+    execute "set <f26>=\<esc>OM"
+    imap <silent><buffer> <f26> <plug>(vimtex-delim-close)
+endfunction
+augroup rc_filetype_tex
+    au!
+    autocmd FileType tex call textobj#user#plugin('latex', {
+        \  'quote': {
+        \     'pattern': ['`', "'"],
+        \     'select-a': "a'", 'select-i': "i'",
+        \   },
+        \  'double-quote': {
+        \     'pattern': ['``', "''"],
+        \     'select-a': 'a"', 'select-i': 'i"',
+        \   },
+        \ })
+    autocmd FileType tex setlocal iskeyword-=\
+    " autocmd FileType tex setlocal iskeyword+=:
+
+    autocmd User PreFileType_tex call s:rc_filetype_tex_maps()
 augroup END
 
 " matlab
@@ -1484,6 +1575,7 @@ augroup rc_filetype_vim
     autocmd FileType vim nnoremap <silent><buffer> K
         \ :<C-U>exe 'topleft help '.scriptease#helptopic()<CR>
 augroup END
+
 
 " }}}1
 
@@ -1539,11 +1631,13 @@ nnoremap <silent> g.         :<C-U>cd %:p:h<CR>:pwd<CR>
 nnoremap <silent> <leader>T  :<C-U>TagbarToggle<CR>
 
 " figlet
-nnoremap <silent> gy :set operatorfunc=FigOper<cr>g@
-nnoremap <silent> gyy :.Figlet<cr>
-vnoremap <silent> gy :Figlet<cr>
-nnoremap <silent> gY :call <sid>FigPickerMode()<cr>
-" XXX better n/vmap for fig picker mode
+nnoremap <silent> gy :set operatorfunc=FIGlet#FIGOper<cr>g@
+nnoremap <silent> gyy :<c-u>exe 'normal 0gy' . v:count1 . '$'<cr>
+nnoremap <silent> gY :FIGlet<cr>
+vnoremap <silent> gy :FIGlet<cr>
+
+" XXX better n/vmap for fig picker mode?
+" nnoremap <silent> gY :call <sid>FigPickerMode()<cr>
 
 " show syntax under cursor
 nnoremap gb :call SyntaxAttr()<cr>
@@ -1551,7 +1645,9 @@ nnoremap gB :echo "hi<"
     \ . synIDattr(synID(line("."),col("."),1),"name") . '> trans<'
     \ . synIDattr(synID(line("."),col("."),0),"name") . "> lo<"
     \ . synIDattr(synIDtrans(synID(line("."),col("."),1)),"name") . ">"<CR>
-nnoremap g<c-b> <plug>HiLinkTrace
+nmap <silent> g<c-b> :<c-u>HLTX!<cr>
+" this one doesn't seem to work
+nmap <sid>(hlt) <plug>HiLinkTrace
 
 " free keys xxx
 " gb show syntax
@@ -1670,6 +1766,14 @@ cnoremap <c-h> <left>
 cnoremap <c-l> <right>
 cnoremap <c-x> <s-left>
 cnoremap <c-o> <s-right>
+
+" prefix command history
+" cnoremap <c-n> <down>
+" cnoremap <c-p> <up>
+
+" helpful expansion?
+" cnoremap %<tab> <c-r>=expand('%')<cr>
+" cabbrev <expr> %% expand('%:h').'/'
 
 " XXX considered harmful?
 set <a-b>=b
@@ -2100,35 +2204,78 @@ vnoremap <silent> <leader>J :Join ', '<cr>
 " zero-paste: convert register to character-wise
 function! ZeroPaste(p)
     call setreg(v:register, getreg(v:register), 'c')
-    exe 'normal '.v:register.a:p
+    exe 'normal "'.v:register.a:p
 endfunction
-nnoremap zp :<c-u>call ZeroPaste('p')<cr>
-nnoremap zP :<c-u>call ZeroPaste('P')<cr>
+nnoremap <silent> zp :<c-u>call ZeroPaste('p')<cr>
+nnoremap <silent> zP :<c-u>call ZeroPaste('P')<cr>
 
 " change-paste: like visual paste but preserves " register
 " usually want cpw/cpiw 
-" the previous text goes into the "- register
+" the removed text goes into the "- register
 " repeat already works
 function! ChangePasteOp(motionType)
     let l:save = @"
-    normal! `[v`]p
-    if v:register == '"'
-        let @" = l:save
+    let l:reg = s:change_paste_register
+    if l:reg == '='
+        let @" = getreg(s:change_paste_register)
+        let l:reg = '"'
+    endif
+    if s:EmptyRegion()
+        normal! `]
+    elseif a:motionType == 'line'
+        normal! '[V']
+    elseif a:motionType == 'char'
+        normal! `[v`]
+    endif
+    exe 'normal! "'.l:reg.'p'
+    let @" = l:save
+    if maparg('w', 'o') == maparg('<sid>(cp-w-oper)', 'o')
+        ounmap w
     endif
 endfunction
 
-nnoremap <silent> cp :set operatorfunc=ChangePasteOp<cr>g@
-" special case like cw
+function! s:EmptyRegion()
+    let l:begin = getpos("'[")
+    let l:end = getpos("']")
+    return l:begin[1] == l:end[1] && l:end[2] < l:begin[2]
+endfunction
+
+" self-destructing omap
+onoremap <expr> <sid>(cp-w-oper) <sid>ChangePasteW()
+function! s:ChangePasteW()
+    if &operatorfunc == 'ChangePasteOp' && v:operator == 'g@'
+        return 'e'
+    endif
+    if maparg('w', 'o') == maparg('<sid>(cp-w-oper)', 'o')
+        ounmap w
+    endif
+    return 'w'
+endfunction
+
+" set up change-paste
+function! s:ChangePaste()
+    set operatorfunc=ChangePasteOp
+    let s:change_paste_register = v:register
+    if maparg('w', 'o') == ""
+        exe 'onoremap <expr> w '.maparg('<sid>(cp-w-oper)', 'o')
+    endif
+    return 'g@'
+endfunction
+nnoremap <expr> <sid>(cp-start) <sid>ChangePaste()
+nmap <silent> cp <sid>(cp-start)
+
+nmap <silent> cpp cp_
+nmap <silent> cP cp$
+
+" special case similar to cw
 nmap <silent> cpw cpe
 
 " vinegar
-nmap <leader>- <Plug>VinegarSplitUp
+" nmap <leader>- <Plug>VinegarSplitUp
+nmap <leader>- <Plug>VinegarUp
 
 " do not let vinegar override this map 
 " nnoremap - -
-
-" vimtex end-wise style end complete (xxx move)
-imap <c-x><cr> <plug>(vimtex-delim-close)
 
 " iabbr <expr> ]] vimtex#delim#close()
 " imap <f26> <plug>(vimtex-delim-close)
@@ -2138,8 +2285,8 @@ imap <c-x><cr> <plug>(vimtex-delim-close)
 " ViewDoc for other file types
 
 " a somewhat more useful go-to-middle of text
-nnoremap <silent> gm :exe 'normal '.float2nr(&tw/2).'\|'<cr>
 nnoremap <silent> gM gm
+nnoremap <silent> gm :exe 'normal '.float2nr(&tw/2).'\|'<cr>
 
 " }}}1
 
@@ -2162,19 +2309,21 @@ function! s:init()
         augroup END
     endif
 
-    " override vim-vinegar's default map
+    " undo vim-vinegar's default map
     if get(g:, 'loaded_vinegar', 0) && maparg('-', 'n') != ''
         unmap -
     endif
 
     " XXX testing
-   let g:latex_to_unicode_suggestions = 1
+    if g:rc_disable_youcompleteme
+        let g:latex_to_unicode_suggestions = 1
+    endif
 endfunction
 
 if v:vim_did_enter
     call s:init()
 else
-    au VimEnter * call s:init()
+    au VimEnter * nested call s:init()
 endif
 
 set secure
