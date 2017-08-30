@@ -1,10 +1,10 @@
 " ────────────────────────────────────────────────────────────────────────
-"       ___              __     _                _
-"      /   |  ____  ____/ /_  _( )_____   _   __(_)___ ___  __________
-"     / /| | / __ \/ __  / / / /// ___/  | | / / / __ `__ \/ ___/ ___/
-"    / ___ |/ / / / /_/ / /_/ / (__  )   | |/ / / / / / / / /  / /__
-"   /_/  |_/_/ /_/\__,_/\__, / /____/    |___/_/_/ /_/ /_/_/   \___/
-"                      /____/
+"      ___              __     _                _
+"     /   |  ____  ____/ /_  _( )_____   _   __(_)___ ___  __________
+"    / /| | / __ \/ __  / / / /// ___/  | | / / / __ `__ \/ ___/ ___/
+"   / ___ |/ / / / /_/ / /_/ / (__  )   | |/ / / / / / / / /  / /__
+"  /_/  |_/_/ /_/\__,_/\__, / /____/    |___/_/_/ /_/ /_/_/   \___/
+"                     /____/
 " ────────────────────────────────────────────────────────────────────────
 
 " overview {{{1
@@ -28,15 +28,16 @@
 " \h
 " \i            YcmDiagnostic (TODO)
 " \j
+" \J            Join with commas
 " \k
 " \l            vimtex mappings
 " \m            enable modeline & reload (TODO)
-" \n
+" \n            Narrow region
 " \o            CtrlP (all files in directory)
 " \p            CtrlP buffers
 " \q            CtrlP quickfix
 " \Q            Toggle quickfix
-" \r
+" \r            Clipbrd (register view)
 " \s            Syntax check
 " \S            Syntax toggle
 " \t            CtrlP tags
@@ -51,22 +52,31 @@
 "
 " gy{motion},
 " gyy,
-" {Visual}gy    figlet  
+" {Visual}gy    figlet
 " gY            figlet font picker
 " g.            globally change directory
 " gb, gB        show syntax under cursor
+"                   (also scriptease zS)
 " gl            convert :emoji: into emoji
 "
 " yp, yP        open line and set paste (above, below)
 "
+" F-maps
+" <f2>          ycm detailed diagnostics
+" <f7>          vimtex new command
+" <f19>         ycm invoke completion
+" <f24>/<f25>   focus gained/lost
+" <f26>         <s-cr>
+"
 " free keys: gz zp zy z/ g/ z\ g\
 " <f20> to <f37>
+" this is really k1-k9,k;,FA-FZ
 
 " Todo
 "   - ripgrep
 "   - syntastic -> ale
 "   - vdebug
-"   - completion
+"   - completion (mucomplete?)
 "   - automatic indent / modelines
 "   - supertab chain?
 "   - what is setting up bracketed paste?
@@ -76,12 +86,13 @@
 "   - fmt equalprg vs q
 "   - help abbr
 "   - look into cycle/switch
+"   - better increment/decrement
 "   - clipbrd/tregisters
+"   - tags gutentags vs highlighting (easytags/taghighlight)
 
 " }}}1
 
 " the basics {{{1
-" set nocompatible
 set ts=4
 set sw=4
 set textwidth=74
@@ -105,7 +116,19 @@ set thesaurus=~/.vim/config/mthesaur.txt
 " set dictionary=/usr/share/dict/words
 
 " set formatprg=fmt\ --width=&textwidth
-set formatprg=fmt\ --width=74
+" set formatprg=fmt\ --width=74\ -u
+" let $PARINIT='rTbgqR B=.,?_A_a Q=_s>|'
+
+function! SetFormatPrg()
+    if &textwidth > 0
+        let &formatprg='par '.&textwidth.'j'
+    endif
+endfunction
+augroup rc_formatprg
+    autocmd!
+    autocmd OptionSet textwidth call SetFormatPrg()
+augroup END
+call SetFormatPrg()
 
 " j: remove comments when joining
 " l: don't break long lines in insert mode
@@ -119,7 +142,8 @@ set formatoptions+=jl
 
 " set fillchars=vert:║,fold:- ─
 set fillchars=stl:\ ,stlnc:\ ,fold:\ ,vert:│
-set listchars=trail:·
+set listchars=tab:»·,eol:↲,nbsp:␣,extends:…
+set listchars+=space:␣,precedes:<,extends:>,trail:·
 let &showbreak = " ❯❯❯ "   " ∴  ⮱  → ↳ 🡆 ❯
 
 set laststatus=2
@@ -129,7 +153,7 @@ set wildmode=longest:full,full
 set suffixes+=.pdf,.synctex
 set isfname-==
 
-set splitbelow   " nb ctrlp sets this
+set splitbelow
 set splitright
 set switchbuf=useopen " ,split
 set previewheight=18
@@ -146,41 +170,96 @@ endif
 
 " use ag for grepping
 if executable('ag')
+    " xxx experimental
+    function! QF_reshow()
+        if &buftype isnot '' | return | endif
+        let l:win = filter(getwininfo(),
+            \ 'v:val.quickfix && !v:val.loclist')
+        if !empty(l:win)
+            exe l:win[0].winnr.'windo normal! zMzv'
+        endif
+    endfunction
+    augroup qf_something
+        au!
+        " au BufWinEnter * call QF_reshow()
+    augroup END
+
+    function! s:ag_do_qf(title)
+        if empty(getqflist())
+            cclose
+            return
+        endif
+
+        let l:lnum = line('.')
+        let l:bufnr = bufnr('')
+
+        copen
+
+        let l:qfln = map(getqflist(), 'v:val.bufnr == '.l:bufnr
+                    \ . '&& v:val.lnum == ' .l:lnum )
+        let l:qfln = index(l:qfln, 1)+1
+        if l:qfln > 0
+            execute 'normal! '.l:qfln.'ggzv'
+
+            " this jumps back to the previous buffer
+            execute 'cc '.l:qfln
+        endif
+
+        call setqflist([], 'a', {'title': a:title})
+    endfunction
+
     set grepprg=ag\ --nogroup\ --nocolor\ --smart-case\
-        \ --column\ --follow\ -C0
+        \ --column\ --follow\ -C0\ -W120
     set grepformat=%f:%l:%c:%m
-    command! -nargs=+ -complete=file -bar
-        \ Ag silent! grep! <args>|cwindow|redraw!
+
+    function! s:ag_do(str)
+    endfunction
+
+    " xxx don't switch to alternate terminal (t_ti/t_te)
+    " xxx make this a function
+    command! -nargs=+ -complete=file -bar Ag silent! grep! <args>
+        \ | call histadd('cmd', escape('Ag '.<q-args>, '#%|'))
+        \ | call s:ag_do_qf(escape(':Ag '.<q-args>, '#%|'))
+        \ | redraw!
 endif
 
 if exists(':Ag')
-    function! s:Ag_cword()  " XXX this doesn't actually work..
-        return escape(shellescape(expand("<cword>"),1),'\|#%')
+    " function! s:Ag_cword()  " XXX this doesn't actually work..
+    "     return escape(shellescape(expand("<cword>"),1),'\|#%')
+    " endfunction
+    function! s:ag_cword()
+        return escape(shellescape(expand("<cword>"), 1), '#%|')
     endfunction
-    nnoremap <leader>G :Ag -Q <c-r>=<sid>Ag_cword()<cr><cr>
-    nnoremap <leader>g :Ag 
+    nnoremap <leader>G :Ag -Q <c-r>=<sid>ag_cword()<cr><cr>
+    nnoremap <leader>g :Ag<space>
 endif
 
 " global rc options
-let g:rc_disable_youcompleteme = 0
+let g:rc_disable_youcompleteme = 1
+let g:rc_tmux_cursor_codes = 1
+let g:rc_no_colors = 0
 
-" xxx move this
-if get(g:, 'rc_disable_youcompleteme', 0)
-    let g:loaded_youcompleteme = 1
-endif
+" vim global opts
+let g:vimsyn_embed = 0  " cf vim/vim/issues/668
+let g:tex_flavor='latex'
 
-" load site-specific configs
+" directory for the rest of the configuration
 let g:config_home = expand('~/.vim/config')
-autocmd BufRead .vimrc exe 'setl path+='.g:config_home
+augroup rc_config_home
+    au!
+    autocmd BufEnter *vimrc exe 'setl path+='.g:config_home
+augroup END
 
+" some settings will change if we are inside tmux
 let g:within_tmux = ($TMUX != '')
 
+" load site-specific configs
 let g:site_config = g:config_home.'/site.'.hostname().'.vim'
 if !filereadable(g:site_config)
     let g:site_config = g:config_home.'/site.default.vim'
 endif
 
-exec 'source' g:site_config
+exe 'source' g:site_config
 
 " }}}1
 
@@ -194,17 +273,98 @@ exec 'source' g:site_config
 " ────────────────────────────────────────────────────────────────────────
 " plugins {{{1
 
+" install this FileType hook now to set options
+" before plugins get a chance to do anything
 augroup rc_pre_filetype_plugin
     autocmd!
     autocmd FileType * call s:PreFTPlugin(expand("<amatch>"))
 augroup END
 
-" ~/.vim/config/plugs.vim
+" custom modelines should be read at the end of BufEnter (for setting
+" readonly) or at the top of BufWinEnter (overloading built-in modeline)
+" https://github.com/vim/vim/blob/dde81312/src/buffer.c#L348
+"
+" the (empirically determined) order is:
+" (BufReadPost, FileType, BufEnter, <modeline>, BufWinEnter)
+function! s:top_bufwinenter_hook()
+endfunction
+augroup rc_top_bufwinenter_hook
+    autocmd!
+    autocmd BufWinEnter * call s:top_bufwinenter_hook()
+augroup END
+
+" try to install this as late as possible so
+" that it can act similar to setting a modeline
+" xxx could we just use after/..?
+function! s:buf_stdin_readpost()
+    let b:do_end_bufenter_hook = 1
+    call s:install_end_bufenter_hook(1)
+endfunction
+augroup rc_buf_stdin_readpost
+    autocmd!
+    autocmd BufReadPost,StdinReadPost * call s:buf_stdin_readpost()
+augroup END
+
+function! s:mostshift()
+    let l:most = []
+    if !filereadable(@%) | return [0, []] | endif
+    try
+        let l:most = split(system('mostshift '.@%), '\_s\+')
+    endtry
+
+    let l:sw = 0
+    if len(l:most) >= 1
+        let l:sw = str2nr(l:most[0])
+        let l:flags = split(get(l:most, 1, ''), ',')
+    endif
+    return [l:sw, l:flags]
+endfunction
+
+" XXX! switch to bufreadpost or somethign
+" this is called when switchig iwndows
+" maybe make self-destructing?
+
+function! s:end_bufenter_hook()
+    if !get(b:, 'do_end_bufenter_hook', 0) | return | endif
+    let b:do_end_bufenter_hook = 0
+
+    if &buftype isnot '' | return | endif
+
+    " use mostshift to determine the number of spaces per indent
+    let [l:sw, l:flags] = s:mostshift()
+
+    " file has determinable shiftwidth
+    if l:sw > 0
+        let &shiftwidth = l:sw
+    endif
+
+    " file uses a mix of tabs and spaces
+    if index(l:flags, 'space') > -1 && index(l:flags, 'tab') > -1
+        set tabstop=8
+    endif
+endfunction
+
+function! s:install_end_bufenter_hook(enabled)
+    augroup rc_end_bufenter_hook
+        autocmd!
+        if a:enabled
+            " xxx should we use nested here?
+            autocmd BufEnter * call s:end_bufenter_hook()
+        endif
+    augroup END
+endfunction
+
+" specific plugin disable
+if get(g:, 'rc_disable_youcompleteme', 0)
+    let g:loaded_youcompleteme = 1
+endif
+
+" source the plugin list
+" usually at ~/.vim/config/plugs.vim
 execute 'source' g:config_home.'/plugs.vim'
 
-if !exists("g:colors_name")
-
-endif
+" if !exists("g:colors_name")
+" endif
 
 " colorscheme setup
 " set background=dark
@@ -218,32 +378,64 @@ endif
 " let g:airline_theme = 'nord'
 
 " jump to the last position in file when reopening
-augroup vim_startup
+augroup rc_last_position
     autocmd!
     autocmd BufReadPost * 
         \ if line("'\"") > 0 && line("'\"") <= line("$")
-        \| exe "normal! g`\"zv" | endif
+        \ | exe 'normal! g`"zv' | endif
 augroup END
 
 " allows cursor to change
 " XXX this can be cleaned up, maybe just use wincent/terminus
 " also see jszakmeister/vim-togglecursor
-if exists('$TMUX')
-    " let &t_SI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=1\x7\<Esc>\\"
-    " let &t_EI = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=0\x7\<Esc>\\"
-    " let &t_SR = "\<Esc>Ptmux;\<Esc>\<Esc>]50;CursorShape=2\x7\<Esc>\\"
-    " this requires tmux codes to be set appropriately
-    let &t_SI = "\<Esc>[6 q"
-    let &t_EI = "\<Esc>[2 q"
-    let &t_SR = "\<Esc>[4 q"
+if g:within_tmux
+    function! s:tmux_escape(c)
+        return "\<Esc>Ptmux;\<Esc>".a:c."\<Esc>\\"
+    endfunction
+    if g:rc_tmux_cursor_codes
+        " this requires tmux codes to be set appropriately
+        let &t_SI = "\<Esc>[6 q"
+        let &t_EI = "\<Esc>[2 q"
+        let &t_SR = "\<Esc>[4 q"
+    else
+        let &t_SI = s:tmux_escape("\<Esc>]50;CursorShape=1\x7")
+        let &t_EI = s:tmux_escape("\<Esc>]50;CursorShape=0\x7")
+        let &t_SR = s:tmux_escape("\<Esc>]50;CursorShape=2\x7")
+    endif
 else
-    let &t_SI = "\<Esc>]50;CursorShape=1\x7"
-    let &t_EI = "\<Esc>]50;CursorShape=0\x7"
-    let &t_SR = "\<Esc>]50;CursorShape=2\x7"
+         " let l:color = '292D3E'
+    "     let l:code = "\<Esc>]11;#".l:color."\x7"
+    "     sil! exe "!echo ".shellescape(l:code,1)
+    "     sil! redraw!
+
+    function! KonsoleBgSet()
+        let l:color = '#292D3E'
+        " let l:color = 'red'
+        return '\e]11;'.l:color.'\a'
+    endfunction
+    function! KonsoleDoSetBg()
+        let l:t_te = &t_te
+        let l:t_ti = &t_ti
+        set t_te= t_ti=
+        exe "sil! !echo -ne ".shellescape(KonsoleBgSet(),1)
+        let &t_te = l:t_te
+        let &t_ti = l:t_ti
+    endfunction
+
+    " sil! redraw!
+    " au InsertEnter,InsertLeave * call KonsoleDoSetBg()
+
+    " let &t_ts = s:KonsoleBgSet() . ''
+
+    function! s:KonsoleProfile(s)
+        return "\<Esc>]50;".a:s."\x7"
+    endfunction
+    let &t_SI = s:KonsoleProfile('CursorShape=1;BlinkingCursorEnabled=1')
+    let &t_EI = s:KonsoleProfile('CursorShape=0;BlinkingCursorEnabled=0')
+    let &t_SR = s:KonsoleProfile('CursorShape=2;BlinkingCursorEnabled=1')
 endif
 
 
-" ."\<Esc>]50;BlinkingCursorEnabled=2\x7",
 
 
 " transparent background
@@ -329,7 +521,6 @@ endfunction
 
 let g:vimtex_view_forward_search_on_start = 0
 let g:vimtex_imaps_leader = '`'
-autocmd FileType tex imap <silent><buffer> `` ``
 let g:vimtex_indent_ignored_envs = ['document', 'aligned']
 
 " cleanup vimtex viewer windows
@@ -356,16 +547,44 @@ function! VimtexCleanViewers()
     endfor
 endfunction
 
-augroup vimtex_cleanup
-    au!
-    au VimLeavePre * call VimtexCleanViewers()
-    " au User VimtexEventQuit call VimtexCleanViewers()
-    au User VimtexEventQuit echo 'vimtex quitting '.bufname('%').'|'.b:vimtex_id | sleep 400m
+function! VimtexCloseViewer()
+    if !executable('xdotool') | return | endif
+    if !exists('b:vimtex') || empty(b:vimtex) | return | endif
+
+    let l:xwin_id = b:vimtex.viewer.xwin_id
+    if !l:xwin_id | return | endif
+
+    call system('xdotool windowclose '. l:xwin_id)
+endfunction
+
+augroup vimtex_clean_viewers
+    autocmd!
+    autocmd User VimtexEventQuit call VimtexCloseViewer()
 augroup END
+
+
+" augroup vimtex_config
+"     au!
+"     au User VimtexEventQuit     VimtexClean
+"     " au User VimtexEventQuit     call vimtex#compiler#clean(0)
+"     au User VimtexEventQuit     echo &filetype | sleep 2
+" augroup END
+
+
+    " au User VimtexEventQuit     echo &filetype | sleep 10
+    " au User VimtexEventQuit     echo b:vimtex.tex | exe 'VimtexClean'   | sleep 1 
+    " au User VimtexEventInitPost echo b:vimtex.tex | exe 'VimtexCompile' | sleep 1
+    " au VimLeavePre * call VimtexCleanViewers()
+    " au User VimtexEventQuit call VimtexCleanViewers()
+    " au User VimtexEventQuit echo 'vimtex quitting '.b:vimtex.tex | sleep 400m
 
 " }}}2
 
+" scratch {{{2
 
+let g:scratch_autohide = 1
+
+" }}}2
 
 " call vimtex#imaps#add_map({
 "     \ 'lhs' : 'test',
@@ -429,11 +648,6 @@ augroup END
 " endif
 
 
-" xxx where should this be?
-let g:user_completion_chain = [ 
-     \ 'emoji#complete', 
-     \ 'syntaxcomplete#Complete',
-     \ ]
 
 " autocmd Filetype *
 "     \   if &omnifunc == "" |
@@ -472,11 +686,6 @@ endfunction
     " setlocal omnifunc=MyComplete
     " setlocal omnifunc=emoji#complete
 " endif
-
-" if the filetype provides no omnifunc, use the custom chain
-autocmd Filetype * if &omnifunc == "" 
-    \ |     setlocal omnifunc=CompletionChain
-    \ | endif
 
 " autocmd Filetype * if &omnifunc == "" 
 "     \ |     setlocal omnifunc=syntaxcomplete#Complete
@@ -532,6 +741,11 @@ let g:airline#extensions#syntastic#enabled = 1
 let g:airline#extensions#tagbar#enabled = 1
 let g:airline#parts#ffenc#skip_expected_string='utf-8[unix]'
 
+let g:airline#extensions#hunks#enabled = 0
+
+" narrow region integration is too ugly
+let g:airline#extensions#nrrwrgn#enabled = 0
+
 " xxx
 " let g:airline#extensions#tagbar#flags = 'p'
 
@@ -542,9 +756,9 @@ let g:airline#extensions#vimtex#right = ")"
 
 let g:airline_section_error = ''  " temporary, to hide red arrow
 let g:airline_section_warning = ''
-let g:airline_detect_spelllang = 0
+let g:airline_skip_empty_sections = 1
 
-" let g:airline_skip_empty_sections = 1
+let g:airline_detect_spelllang = 0
 
 " let spc = g:airline_symbols.space
 " let g:airline_section_z = airline#section#create(['windowswap', 'obsession', '%3p%%'.spc, 'linenr', 'maxlinenr', spc.':%3v'])
@@ -579,13 +793,25 @@ call airline#parts#define_minwidth('foo', 50)
 
 " let g:airline_section_z = airline#section#create(['windowswap', '%3p%% ', 'linenr', 'maxlinenr', ' :%3v'])
 
+call airline#parts#define_function('gutentags', 'gutentags#statusline')
 
 " XXX
 let g:airline#extensions#windowswap#enabled = 1
 let g:airline#extensions#windowswap#indicator_text = '👌' " 🍔 WS'
 
-let g:airline_section_z = airline#section#create(
-    \ ['windowswap', 'thisway', 'linenr', 'maxlinenr', ' :%3v'])
+au User AirlineAfterInit let g:airline_section_z
+    \ = airline#section#create( ['windowswap', 'gutentags', 'thisway', 
+    \ 'linenr', 'maxlinenr', ' :%3v'] )
+
+" let g:airline_section_z = airline#section#create(
+"     \ ['windowswap', 'gutentags', 'thisway', 
+"     \  'linenr', 'maxlinenr', ' :%3v'])
+
+" let g:airline_section_z = airline#section#create(
+"         \ ['windowswap', 'obsession', '%3p%% ', 'linenr', 'maxlinenr', ' :%3v'])
+
+" let g:airline_section_z = airline#section#create(
+"         \ ['windowswap'])
 
 let g:airline#extensions#default#section_truncate_width = {
    \ 'b': 75, 'x': 110, 'y': 88, 'z': 50, 
@@ -634,6 +860,14 @@ let g:netrw_list_hide = '\(^\|\s\s\)\zs\.\S\+'
 let g:netrw_altv = 1
 "}}}2
 
+" quickscope {{{2
+let g:qs_highlight_on_keys = ['f', 'F', 't', 'T']
+
+let g:qs_second_occurrence_highlight_color_gui = '#f4e541'
+let g:qs_first_occurrence_highlight_color_gui = '#41f468'
+
+"}}}2
+
 " viewdoc {{{2
 " XXX
 let g:viewdoc_open = 'topleft new'
@@ -664,18 +898,9 @@ cnoreabbrev <expr> help   getcmdtype()==':'
 
 "}}}2
 
-" quickscope {{{2
-let g:qs_highlight_on_keys = ['f', 'F', 't', 'T']
-
-let g:qs_second_occurrence_highlight_color_gui = '#f4e541'
-let g:qs_first_occurrence_highlight_color_gui = '#41f468'
-
-"}}}2
-
 
 let g:Tex_Leader2='<C-\>'
 
-let g:tex_flavor='latex'
 let g:Tex_AutoFolding=0
 let g:Tex_ShowErrorContext=0
 let g:tex_comment_nospell=1
@@ -737,7 +962,9 @@ let g:vdebug_keymap = {
 
 
 " vimtex
-let g:vimtex_delim_list = {'mods' : {}, 'delim_tex': {}}
+let g:vimtex_delim_list = {'mods' : {}, 'delim_tex': {}, 
+      \ 'delim_math': {} }
+
 let g:vimtex_delim_list.mods.name = [
       \ ['\left', '\right'],
       \ ['\mleft', '\mright'],
@@ -760,6 +987,21 @@ let g:vimtex_delim_list.delim_tex.name = [
       \ ['`', "'"],
       \]
 
+let g:vimtex_delim_list.delim_math.name = [
+      \ ['(', ')'],             ['\{', '\}'], 
+      \ ['\lvert', '\rvert'],   ['\lVert', '\rVert'],
+      \ ['\lfloor', '\rfloor'], ['\lceil', '\rceil'],
+      \ ['\langle', '\rangle'], ['\ulcorner', '\urcorner'],
+      \ ['[', ']'],
+      \]
+let g:vimtex_delim_list.delim_math.re = [
+      \ ['(', ')'],             ['\\{', '\\}'], 
+      \ ['\\lvert', '\\rvert'],   ['\\lVert', '\\rVert'],
+      \ ['\\lfloor', '\\rfloor'], ['\\lceil', '\\rceil'],
+      \ ['\\langle', '\\rangle'], ['\\ulcorner', '\\urcorner'],
+      \ ['\\\@<!\[', '\]'],
+      \]
+
 let g:vimtex_compiler_latexmk = {
     \   'backend'    : 'jobs',
     \   'background' : 1,
@@ -770,17 +1012,6 @@ let g:vimtex_compiler_latexmk = {
 " xxx make tex <buffer> only!
 " nnoremap <silent> <plug>(vimtex-delim-toggle-modifier-reverse)
 "     \ :call vimtex#delim#toggle_modifier(-1)<cr>
-
-nmap <silent> <leader>l.  :<c-u>lcd <c-r>=b:vimtex.root<cr><cr>:pwd<cr>
-nmap <silent> <leader>lg.  :<c-u>cd <c-r>=b:vimtex.root<cr><cr>:pwd<cr>
-
-nmap <silent> cd <plug>(vimtex-delim-toggle-modifier)
-nmap <silent> cD <plug>(vimtex-delim-toggle-modifier-reverse)
-xmap <silent> cd <plug>(vimtex-delim-toggle-modifier)
-xmap <silent> cD <plug>(vimtex-delim-toggle-modifier-reverse)
-nmap <silent> cse* <plug>(vimtex-env-toggle-star)
-nmap <silent> csc* <plug>(vimtex-cmd-toggle-star)
-" alternative maps cd, cD, co, cO, csd+/-
 
 let g:vimtex_view_automatic = 0
 let g:vimtex_view_method = 'zathura'
@@ -825,7 +1056,7 @@ function! s:latexSurround()
    let b:surround_{char2nr("c")} = "\\\1command: \1{\r}"
 endfunction
 
-" vimtex + ycm
+" ycm + tex: assumes vimtex's omnifunc
 if !exists('g:ycm_semantic_triggers')
     let g:ycm_semantic_triggers = {}
 endif
@@ -845,6 +1076,8 @@ let g:ycm_semantic_triggers.tex = [
 
 " let g:ycm_min_num_of_chars_for_completion = 99
 " let g:ycm_cache_omnifunc = 0
+
+" youcompleteme
 
 let g:ycm_semantic_triggers.text = [
     \ 're!:[A-Za-z]*',
@@ -944,10 +1177,12 @@ let g:ctrlp_working_path_mode = 'ca'
 " markdown (@gabrielelana, @ibabushkin)
 let g:markdown_enable_mappings = 0
 
-" Figlet
+" Figlet {{{2
+
 let g:figletFontDir='/usr/share/figlet/fonts'
 let g:figletFont='slant'
 
+" }}}2
 
 " tagbar
 " let g:tagbar_type_help = {
@@ -1065,23 +1300,110 @@ endfunction
 let g:nrrw_rgn_nomap_nr = 1
 let g:nrrw_rgn_nomap_Nr = 1
 
+xmap <leader>n <Plug>NrrwrgnDo
+nmap <silent> <leader>n <Plug>NrrwrgnDo
+
 " }}} 2
+
+
+" TagHighlightSettings
+function! UTTest()
+    if ! exists('g:TagHighlightSettings')
+        let g:TagHighlightSettings = {}
+    endif
+    let l:tf = tagfiles()
+    if !empty(l:tf)
+        let g:TagHighlightSettings['TagFileName'] = l:tf[0]
+        exe 'UpdateTypesFileOnly'
+    else
+        let g:TagHighlightSettings['TagFileName'] = ''
+    endif
+endfunction
 
 " }}}1
 
 " ────────────────────────────────────────────────────────────────────────
-"                               __     __  _           
-"   _________  ____ ___  ____  / /__  / /_(_)___  ____ 
-"  / ___/ __ \/ __ `__ \/ __ \/ / _ \/ __/ / __ \/ __ \
-" / /__/ /_/ / / / / / / /_/ / /  __/ /_/ / /_/ / / / /
-" \___/\____/_/ /_/ /_/ .___/_/\___/\__/_/\____/_/ /_/ 
-"                    /_/                               
+"                                __     __  _
+"    _________  ____ ___  ____  / /__  / /_(_)___  ____
+"   / ___/ __ \/ __ `__ \/ __ \/ / _ \/ __/ / __ \/ __ \
+"  / /__/ /_/ / / / / / / /_/ / /  __/ /_/ / /_/ / / / /
+"  \___/\____/_/ /_/ /_/ .___/_/\___/\__/_/\____/_/ /_/
+"                     /_/
 " ────────────────────────────────────────────────────────────────────────
 " completion {{{1
 
-" I use youcompleteme, so only the omnifunc is relevant
+" notes
+"   I use youcompleteme, so only the omnifunc is relevant
 
 
+" defines a sequence of completion fall-backs
+let g:user_completion_chain = [
+     \ 'emoji#complete', 
+     \ 'syntaxcomplete#Complete',
+     \ ]
+
+function! CompletionChain(findstart, base)
+  if a:findstart
+    " Test against the functions one by one
+    for fcn in g:user_completion_chain
+      let pos = call(fcn, [a:findstart, a:base])
+
+      " If a function can complete the prefix,
+      " remember the name and return the result from the function
+      if pos >= 0
+        let s:current_completion = fcn
+        return pos
+      endif
+    endfor
+
+    " No completion can be done
+    unlet! s:current_completion
+    return -1
+  elseif exists('s:current_completion')
+
+    " Simply pass the arguments to the selected function
+    return call(s:current_completion, [a:findstart, a:base])
+  endif
+
+  return []
+endfunction
+
+" this is called after the ftplugin, so iff the file type plugin
+" provides no file type-specific omnifunc, use the custom chain
+function! s:set_omni_completion(ft)
+    if &omnifunc == "" 
+        setlocal omnifunc=CompletionChain
+    endif
+endfunction
+autocmd FileType * call s:set_omni_completion(expand("<amatch>")) 
+
+" this is called before the ftplugin, so we can set the ycm 
+" triggers just in time...
+" xxx this doesnt work at all..
+function! s:set_ycm_triggers(ft)
+    " emoji trigger
+    " if !get(g:ycm_semantic_triggers, a:ft, []) 
+        " let g:ycm_semantic_triggers[a:ft] = [
+        "         \ 're!:[A-Za-z]+',
+        "         \ ]
+    " endif
+endfunction
+
+let s:emoji_filetypes = [ 'vim', 'text', 'markdown' ]
+for s:ft in s:emoji_filetypes
+    let g:ycm_semantic_triggers[s:ft] = [
+        \ 're!:[A-Za-z]+',
+        \ ]
+endfor
+
+" au CompleteDone * echo
+
+" TODO: enable auto expansion
+" using ycm/vim's autocommands
+
+" autocmd User PreFileType_ALL call s:set_ycm_triggers(expand("<amatch>"))
+
+" allow page-up/page-down in the completion menu (XXX broken)
 inoremap <silent> <expr> <c-u> pumvisible() ? "\<pageup>"   : "\<c-u>"
 inoremap <silent> <expr> <c-d> pumvisible() ? "\<pagedown>" : "\<c-d>"
 
@@ -1129,7 +1451,7 @@ function! s:DoExpansion()
 endfunction
 
 " normal available: Ctrl-@ Ctrl-X Ctrl-K Ctrl-\ Ctrl-_ 
-" insert available: Ctrl-F Ctrl-L Ctrl-]...
+" insert available: Ctrl-L Ctrl-G. Ctrl-Z Ctrl-/ Ctrl-B... Ctrl-F Ctrl-]...
 
 " <c-r> instead of <expr> because we may modify the buffer
 imap <sid>(expansion) <c-r>=<sid>DoExpansion()<cr>
@@ -1142,14 +1464,39 @@ imap <c-]> <sid>(expansion)
 " endfunction
 " imap <F7> <c-r>=FFF()<cr>
 
+" toggles between virtualedit={all, block}
+function! s:virtualedit_all(state)
+    if !exists('s:virtual_edit')
+        let s:virtual_edit = 'all'
+    endif
+    let l:toggle = (&virtualedit =~# 'all') != a:state
+    if l:toggle
+        let [&virtualedit, s:virtual_edit]
+                \ = [s:virtual_edit, &virtualedit]
+    endif
+    echo ':set virtualedit='.&virtualedit
+endfunction
+
 " }}}1
 
 " ────────────────────────────────────────────────────────────────────────
-"                                                      __
-"      _________  ____ ___  ____ ___  ____ _____  ____/ /____
-"     / ___/ __ \/ __ `__ \/ __ `__ \/ __ `/ __ \/ __  / ___/
-"    / /__/ /_/ / / / / / / / / / / / /_/ / / / / /_/ (__  )
-"    \___/\____/_/ /_/ /_/_/ /_/ /_/\__,_/_/ /_/\__,_/____/
+"      ____                 __  _
+"     / __/_  ______  _____/ /_(_)___  ____  _____
+"    / /_/ / / / __ \/ ___/ __/ / __ \/ __ \/ ___/
+"   / __/ /_/ / / / / /__/ /_/ / /_/ / / / (__  )
+"  /_/  \__,_/_/ /_/\___/\__/_/\____/_/ /_/____/
+"
+" ────────────────────────────────────────────────────────────────────────
+" functions {{{1
+
+" }}}1
+
+" ────────────────────────────────────────────────────────────────────────
+"                                                    __
+"    _________  ____ ___  ____ ___  ____ _____  ____/ /____
+"   / ___/ __ \/ __ `__ \/ __ `__ \/ __ `/ __ \/ __  / ___/
+"  / /__/ /_/ / / / / / / / / / / / /_/ / / / / /_/ (__  )
+"  \___/\____/_/ /_/ /_/_/ /_/ /_/\__,_/_/ /_/\__,_/____/
 "
 " ────────────────────────────────────────────────────────────────────────
 " commands {{{1
@@ -1242,6 +1589,8 @@ endfunction
 command! -nargs=? ScriptnamesBuffer silent call <sid>ScratchCmd('scriptnames', <f-args>)
 command! -nargs=+ ScratchCommand silent call <sid>ScratchCmd(<q-args>)
 
+command! -nargs=? Registers silent exe 'ScratchCommand registers '.<q-args>
+
 " function! vimtex#util#command(cmd)
 "   let l:a = @a
 "   try
@@ -1331,13 +1680,14 @@ function! ToggleList(bufname, pfx)
     if a:pfx == 'l' && len(getloclist(0)) == 0
         echohl ErrorMsg
         echo "Location List is Empty."
+        echohl None
         return
     endif
     let winnr = winnr()
-    exec(a:pfx.'open 8')
-    if winnr() != winnr
-        " wincmd p
-    endif
+    exec a:pfx.'open 8'
+    " if winnr() != winnr
+    "     wincmd p
+    " endif
 endfunction
 
 
@@ -1346,8 +1696,7 @@ command! Bind windo setl scrollbind | setl cursorbind | setl cursorline
 
 " folding
 set foldmethod=marker
-" set foldlevel=0
-set foldcolumn=0
+" set foldlevel=0 foldcolumn=0
 set foldtext=FoldText()
 
 function! FoldText()
@@ -1408,7 +1757,7 @@ function! TxtFoldText()
   return printf('[%s][%s]', level, title)
 endfunction
 
-function! ToggleTextWidth()
+function! s:ToggleTextWidth()
     if &l:textwidth > 0
         let s:old_tw = &l:textwidth
         let &l:textwidth = 0
@@ -1421,7 +1770,15 @@ function! ToggleTextWidth()
     endif
 endfunction
 
-nnoremap <silent> <leader>v :call ToggleTextWidth()<cr>
+let s:default_tw = &g:textwidth ? &g:textwidth : 74
+function! s:ExpandTextWidth()
+    let l:tl = winsaveview().topline
+    let l:longest = max(map(getline(l:tl, l:tl+winheight(0)-1), 
+        \ 'strdisplaywidth(v:val)'))
+    let &l:textwidth = (&l:textwidth == l:longest)
+        \ ? s:default_tw
+        \ : max([ s:default_tw, l:longest ])
+endfunction
 
 " XXX re-enable
 " autocmd OptionSet shiftwidth noautocmd 
@@ -1438,31 +1795,6 @@ nnoremap <silent> <leader>v :call ToggleTextWidth()<cr>
 "     setl expandtab
 " endfunction
 
-function! CompletionChain(findstart, base)
-  if a:findstart
-    " Test against the functions one by one
-    for fcn in g:user_completion_chain
-      let pos = call(fcn, [a:findstart, a:base])
-
-      " If a function can complete the prefix,
-      " remember the name and return the result from the function
-      if pos >= 0
-        let s:current_completion = fcn
-        return pos
-      endif
-    endfor
-
-    " No completion can be done
-    unlet! s:current_completion
-    return -1
-  elseif exists('s:current_completion')
-
-    " Simply pass the arguments to the selected function
-    return call(s:current_completion, [a:findstart, a:base])
-  endif
-
-  return []
-endfunction
 
 
 " 
@@ -1472,14 +1804,21 @@ function! RefreshAppearance()
    endif
 endfunction
 
-"
-function! s:ClearRegisters()
-    let l:regs = 'abcdefghijklmnopqrstuvwxyz0123456789*+-'
+" really clear all the registers, writes viminfo
+function! s:ClearRegisters(...)
+    let l:regs = a:0 ? a:1
+        \ : 'abcdefghijklmnopqrstuvwxyz0123456789*+-'
+    for l:r in split(l:regs, '\zs')
+        if getreg(l:r) isnot ''
+            call setreg(l:r, '')
+        endif
+    endfor
+    wviminfo
     for l:r in split(l:regs, '\zs')
         call setreg(l:r, [])
     endfor
 endfunction
-command! ClearRegisters call s:ClearRegisters()
+command! -nargs=? ClearRegisters call s:ClearRegisters(<f-args>)
 
 " requires mtth/vim-scratch XXX WIP
 function! ScratchRegister()
@@ -1492,26 +1831,57 @@ function! ScratchRegister()
     augroup END
 endfunction
 
-let g:scratch_autohide = 1
+" cause an annoying visual beep
+function! Beep()
+    let l:vb = &vb
+    let l:eb = &eb
+    set vb eb
+    call feedkeys("\<esc>", 'x')
+    let &vb = l:vb
+    let &eb = l:eb
+endfunction
+
+" like :!, but operate on visual selection instead of lines
+function! Vexecute(bang, args) range
+    if empty(a:args) | return | endif
+    normal! gv"zy
+    let l:out = system(a:args, @z)
+    let l:out = substitute(l:out, '\n$', '', '')
+    call setreg('z', l:out, visualmode())
+    normal! gv"zp
+endfunction
+command! -bang -range=0 -nargs=* -complete=shellcmd V call Vexecute(<bang>0, <q-args>)
 
 " }}}1
 
 " ────────────────────────────────────────────────────────────────────────
-"      _____ __        __                       
+"      _____ __        __
 "     / __(_) /__     / /___  ______  ___  _____
 "    / /_/ / / _ \   / __/ / / / __ \/ _ \/ ___/
-"   / __/ / /  __/  / /_/ /_/ / /_/ /  __(__  ) 
-"  /_/ /_/_/\___/   \__/\__, / .___/\___/____/  
-"                      /____/_/                 
+"   / __/ / /  __/  / /_/ /_/ / /_/ /  __(__  )
+"  /_/ /_/_/\___/   \__/\__, / .___/\___/____/
+"                      /____/_/
 " ────────────────────────────────────────────────────────────────────────
 " file types {{{1
 
 " this is called before ftplugin stuff so custom maps 
 " can be defined on a per file type basis before plugins
 function! s:PreFTPlugin(ft)
-    let l:au = 'PreFileType_'.a:ft
+    let l:pft = 'PreFileType_'
+    let l:au = l:pft.a:ft
     if exists('#User#'.l:au)
-        exe 'doautocmd User '.l:au
+        exe 'doautocmd <nomodeline> User '.l:au
+    endif
+
+    " xxx
+    call s:set_ycm_triggers(a:ft)
+
+    " generic handler xxx this is overly complex, 
+    " just call the functions directly
+    " echo 'be'.a:ft | sleep 1
+    let l:au = l:pft.'ALL'
+    if exists('#User#'.l:au)
+        exe 'doautocmd <nomodeline> User '.l:au
     endif
 endfunction
 
@@ -1528,14 +1898,38 @@ augroup rc_filetype_help
 augroup END
 
 " latex
-function! s:rc_filetype_tex_maps()
+function! s:rc_pre_filetype_tex_maps()
     " vimtex end-wise style end completion
     imap <silent><buffer> <c-x><cr> <plug>(vimtex-delim-close)
 
     " shift-return alternative: xxx experimental
     execute "set <f26>=\<esc>OM"
     imap <silent><buffer> <f26> <plug>(vimtex-delim-close)
+
+    " change directory to tex root
+    nmap <silent><buffer> <leader>l.
+        \ :<c-u>lcd <c-r>=b:vimtex.root<cr><cr>:pwd<cr>
+    nmap <silent><buffer> <leader>lg.
+        \ :<c-u>cd <c-r>=b:vimtex.root<cr><cr>:pwd<cr>
+
+    " delimiter modifier toggling e.g., \big( -> \Big(
+    nmap <silent><buffer> cd <plug>(vimtex-delim-toggle-modifier)
+    nmap <silent><buffer> cD <plug>(vimtex-delim-toggle-modifier-reverse)
+    xmap <silent><buffer> Sd <plug>(vimtex-delim-toggle-modifier)
+    xmap <silent><buffer> SD <plug>(vimtex-delim-toggle-modifier-reverse)
+    nmap <silent><buffer> cse* <plug>(vimtex-env-toggle-star)
+    nmap <silent><buffer> csc* <plug>(vimtex-cmd-toggle-star)
+    " alternative maps cd, cD, co, cO, csd+/-?
+
 endfunction
+function! s:rc_post_filetype_tex_maps()
+    " without this, ``a becomes `\alpha
+    " can always use <c-v>` to insert literal `
+    if g:vimtex_imaps_leader == '`'
+        inoremap <silent><buffer> `` ``
+    endif
+endfunction
+
 augroup rc_filetype_tex
     au!
     autocmd FileType tex call textobj#user#plugin('latex', {
@@ -1551,7 +1945,9 @@ augroup rc_filetype_tex
     autocmd FileType tex setlocal iskeyword-=\
     " autocmd FileType tex setlocal iskeyword+=:
 
-    autocmd User PreFileType_tex call s:rc_filetype_tex_maps()
+    autocmd User PreFileType_tex call s:rc_pre_filetype_tex_maps()
+    autocmd FileType tex call s:rc_post_filetype_tex_maps()
+
 augroup END
 
 " matlab
@@ -1563,10 +1959,17 @@ augroup rc_filetype_matlab
 augroup END
 
 " quickfix
+function! QuickFixFold()
+    return matchstr(getline(v:lnum),'^[^|]\+') ==#
+        \ matchstr(getline(v:lnum+1),'^[^|]\+') ? 1 : '<1'
+endfunction
 augroup rc_filetype_qf
     au!
     autocmd FileType qf setlocal wrap textwidth=0 nospell
+        \ foldlevel=0 foldmethod=expr foldcolumn=1 foldopen+=jump
+        \ foldexpr=QuickFixFold()
     autocmd FileType qf nnoremap <silent><buffer> q :<c-u>bd<cr>
+    autocmd FileType qf nnoremap <cr> :exe 'wincmd p \| '.line('.').'cc'<cr>
 augroup END
     
 " vim
@@ -2054,11 +2457,28 @@ inoremap <c-f> <c-r>=EmojiReplace()<cr>
 " ycm goto
 nnoremap <leader>d :YcmCompleter GoTo<CR>
 
-" search for cursor word without jumping
+" search for cursor word without jumping 
+" XXX make this work in visual and backwards
+" (v:searchforward = 0)
 function! SearchWord()
     let @/ = '\<'.escape(expand('<cword>'), 
         \ &magic ? "/.*~[^$\\" : "/^$\\").'\>'
 endfunction
+
+" shellescape(foo, 1)
+" additional = /
+" return substitute(escape(a:text, '\' . ingo#regexp#GetSpecialCharacters() . a:additionalEscapeCharacters), "\n", '\\n', 'g')
+" specialchars return ['^$', '^$.*[~'][&magic]
+" let l:pattern = (a:0 ? a:1 : a:text)
+" if a:text =~# '^\k'
+" let l:pattern = '\<' . l:pattern
+" endif
+" if a:text =~# '\k$'
+" let l:pattern .= '\>'
+" endif
+" return l:pattern
+" endfunction
+
 nnoremap <silent> <leader>* :call SearchWord() \| set hlsearch<cr>
 
 " change cursor word and load search to quickly change occurrences
@@ -2167,17 +2587,25 @@ nnoremap <C-w>e :<C-U>call window#exchange(v:count)<cr>
 " nmap , :5wincmd <<cr>
 " nmap . :5wincmd ><cr>
 
-let g:res_ver_increm = round(&columns*0.03)
-let g:res_hor_increm = round(&lines*0.08)
+function! s:res_ver_increm()
+    return float2nr(round(&columns*0.03))
+endfunction
+function! s:res_hor_increm()
+    return float2nr(round(&lines*0.08))
+endfunction
 
-nnoremap <silent> , :vertical res -5<cr>
-nnoremap <silent> . :vertical res +5<cr>
-nnoremap <silent> < :vertical res -1<cr>
-nnoremap <silent> > :vertical res +1<cr>
-nnoremap <silent> - :res -3<cr>
-nnoremap <silent> = :res +3<cr>
-nnoremap <silent> _ :res -1<cr>
-nnoremap <silent> + :res +1<cr>
+" alt codes for window resizing
+set <a-,>=, <a-.>=.  <a-lt>=< <a-char-62>=>
+set <a-->=- <a-=>== <a-_>=_ <a-+>=+
+
+nnoremap <silent> <a-,> :vertical res -5<cr>
+nnoremap <silent> <a-.> :vertical res +5<cr>
+nnoremap <silent> <a-lt> :vertical res -1<cr>
+nnoremap <silent> <a-char-62> :vertical res +1<cr>
+nnoremap <silent> <a--> :res -3<cr>
+nnoremap <silent> <a-=> :res +3<cr>
+nnoremap <silent> <a-_> :res -1<cr>
+nnoremap <silent> <a-+> :res +1<cr>
 
 " nnoremap gl :exe 'echo '.v:count<cr>
 
@@ -2186,14 +2614,14 @@ set noequalalways  " window management
 
 " enough for 3 windows stacked vertically with LINES=38, winminheight=1
 " set winheight=32 winwidth=16
-set winheight=20 winwidth=16
+set winheight=16 winwidth=16
 set winminheight=1 winminwidth=0
 
 let g:windowswap_map_keys = 0
 " XXX better keymaps?
 "     why doesn't airline work with this?
-" nnoremap <c-w>m :call WindowSwap#MarkWindowSwap()<CR>
-" nnoremap <c-w>' :call WindowSwap#DoWindowSwap()<CR>
+nnoremap <c-w>m :call WindowSwap#MarkWindowSwap()<CR>
+nnoremap <c-w>' :call WindowSwap#DoWindowSwap()<CR>
 
 " see airline extension for windowing
 
@@ -2272,6 +2700,7 @@ nmap <silent> cpw cpe
 
 " vinegar
 " nmap <leader>- <Plug>VinegarSplitUp
+" nmap g= <Plug>VinegarVerticalSplitUp
 nmap <leader>- <Plug>VinegarUp
 
 " do not let vinegar override this map 
@@ -2284,9 +2713,225 @@ nmap <leader>- <Plug>VinegarUp
 " ViewDocWrapper preserve registers
 " ViewDoc for other file types
 
-" a somewhat more useful go-to-middle of text
+" a somewhat more useful go-to-middle of screen
 nnoremap <silent> gM gm
-nnoremap <silent> gm :exe 'normal '.float2nr(&tw/2).'\|'<cr>
+nnoremap <silent> gm :exe 'normal '.float2nr(1+&tw/2).'\|'<cr>
+
+" clipbrd
+nnoremap <leader>r :exe 'ClipBrd '.v:register<cr>z6<cr>
+
+" training
+function! s:Train(c)
+    echo 'Did you really mean to type '.a:c.'?'
+    call Beep() | return a:c
+endfunction
+nnoremap <silent><expr> q <sid>Train('q')
+
+" toggle textwidth/column
+nnoremap <silent> <leader>v :<c-u>call <sid>ToggleTextWidth()<cr>
+
+" set textwidth to longest line current screen, or default
+nnoremap <silent> <leader>V :<c-u>call <sid>ExpandTextWidth()<cr>
+
+" get the script where option was last set
+function! OptionWhereSet(optname)
+    let l:savemore = &more
+    noa set nomore
+    redir => l:lines
+    sil execute 'verbose set '.a:optname.'?'
+    redir END
+    noa let &more = l:savemore
+
+    let l:source = matchlist(l:lines, 'Last set from \(.\+\)$')
+    if len(l:source) == 0
+        return ''
+    end
+    return l:source[1]
+endfunction
+
+" record option settings
+function! s:OptRecord()
+    let l:optname = expand("<amatch>")
+    let l:rec = [ v:option_old, v:option_new, v:option_type, l:optname ]
+
+    let l:source = OptionWhereSet(l:optname)
+    if empty(l:source) | let l:source = '???' | endif
+    call add(l:rec, l:source)
+
+    call add(g:opt_hist, l:rec)
+endfunction
+
+function! s:OptRecordStart()
+    let g:opt_hist = []
+    augroup rc_OptionSet
+        au!
+        au OptionSet * call s:OptRecord()
+    augroup END
+endfunction
+function! s:OptRecordStop()
+    augroup rc_OptionSet
+        au!
+    augroup END
+    let l:opt_hist = g:opt_hist
+    let g:opt_hist = []
+    return l:opt_hist
+endfunction
+
+command! RecordOptions call s:OptRecordStart()
+
+" temporarily force modeline read regardless of 'modeline' setting
+function! s:DoModelines()
+  augroup DoModelines_augroup
+    au!
+    au User DoModelines if 0 | endif
+  augroup END
+  let l:modeline = &modeline
+  noa set modeline
+
+  call s:OptRecordStart()
+  doautocmd User DoModelines
+  let l:opt_hist = s:OptRecordStop()
+
+  noa let &modeline = l:modeline
+
+  for l:o in l:opt_hist
+    echo l:o[3] '('.l:o[2].')' l:o[0] '->' l:o[1]
+  endfor
+endfunction
+command! Modelines call <sid>DoModelines()
+nnoremap <silent> <leader>m :<c-u>call <sid>DoModelines()<cr>
+
+"  XXX experimental
+function! ColumnLock()
+    if mode() != '' | return '' | endif
+
+    function! s:ColumnLock_Enable(state)
+        if !a:state | let g:column_lock = 0 | endif
+        augroup ColumnLock_augroup
+            au!
+            if a:state
+                au CursorMoved * call <sid>ColumnLock_CursorMoved()
+            endif
+        augroup END
+    endfunction
+
+    function! s:ColumnLock_CursorMoved()
+        if mode() != ''
+            call s:ColumnLock_Enable(0)
+            return
+        endif
+
+        if col('.') != g:column_lock
+            exe 'normal '.g:column_lock.'|'
+            " call cursor(0, g:column_lock)
+        endif
+    endfunction
+
+    let s:activate = !get(g:, 'column_lock', 0)
+    let g:column_lock = s:activate ? col('.') : 0
+    call s:ColumnLock_Enable(s:activate)
+
+    if s:activate
+        echo 'column locked'
+    else
+        echo 'column unlocked'
+    endif
+
+    return ''
+endfunction
+" nnoremap <expr> <leader>b ColumnLock()
+" xnoremap <expr> <leader>b ColumnLock()
+" function! s:vblock_rest()
+"     return col('v').'|'
+" endfunction
+"
+" this works:
+" function! s:vblock_store()
+"     let s:vblock_rest_col = col('.')
+"     echo "column stored\r"
+"     return ''
+" endfunction
+" function! s:vblock_rest()
+"     let l:c = get(s:, 'vblock_rest_col', 0)
+"     if l:c == 0
+"         return ''
+"     endif
+"     return l:c.'|'
+" endfunction
+" xnoremap <expr> <c-k> <sid>vblock_rest()
+" xnoremap <expr> <c-l> <sid>vblock_store()
+
+" go to column stored in mark without changing the line
+" if the mark is >, then selection is set to current column
+" if the mark is $, expand to longest line, textwidth, or winwidth
+function! s:vblock_rest()
+    let l:c = nr2char(getchar())
+    if index(['<', "\<cr>", "\<c-l>"], l:c) > -1
+        return col('v').'|'
+    endif
+    if l:c == '>'
+        let l:col = getcurpos()[2] + getcurpos()[3]
+        return 'o'.l:col.'|o'
+    endif
+    if l:c == '$'
+        let [l:a, l:b] = [line('v'), line('.')]
+        if l:a > l:b | let [l:a, l:b] = [l:b, l:a] | endif
+        let l:longest = max(map(getline(l:a, l:b),
+            \ 'strdisplaywidth(v:val)'))
+        let l:col = getcurpos()[2] + getcurpos()[3]
+        if l:col != l:longest
+            return l:longest.'|'
+        elseif &textwidth > 0
+            return &textwidth.'|'
+        else
+            return winwidth(0).'|'
+        endif
+    endif
+    return col("'".l:c).'|'
+endfunction
+xnoremap <expr> <c-l> <sid>vblock_rest()
+
+" stuff v:register into clipboard, after the fact
+function! s:reg_stuff_clip()
+    if $SSH_CLIENT != ''
+        let l:clipfile = expand('~/.ssh_clipboard')
+        call writefile(split(getreg(), '\n'), l:clipfile, 'a')
+        echo '"'.v:register 'stored in file' l:clipfile
+        return
+    endif
+
+    call setreg('+', getreg(), getregtype()) 
+    echo '"'.v:register.' yanked into clipboard'
+endfunction
+
+" ["x]yc puts register into clipboard +
+nnoremap <silent> yc :<c-u>call <sid>reg_stuff_clip()<cr>
+
+" go down (or up) to nearest non-empty in the same column
+function! s:vcol_updown(back)
+    let l:col = getcurpos()[2] + getcurpos()[3]
+    let l:line = search('\%'.l:col.'c\S', 'nW'.(a:back?'b':''))
+    return l:line.'G'
+endfunction
+xnoremap <expr> <c-j> <sid>vcol_updown(0)
+xnoremap <expr> <c-k> <sid>vcol_updown(1)
+
+" }}}1
+
+" ────────────────────────────────────────────────────────────────────────
+"                               _                      __
+"    ___  _  ______  ___  _____(_)___ ___  ___  ____  / /______
+"   / _ \| |/_/ __ \/ _ \/ ___/ / __ `__ \/ _ \/ __ \/ __/ ___/
+"  /  __/>  </ /_/ /  __/ /  / / / / / / /  __/ / / / /_(__  )
+"  \___/_/|_/ .___/\___/_/  /_/_/ /_/ /_/\___/_/ /_/\__/____/
+"          /_/
+" ────────────────────────────────────────────────────────────────────────
+" experiments {{{1
+
+" fix bug(?) in vim/Konsole
+" Konsole does not support this particular escape sequence
+" if g:rc_term_konsole
+set t_SH=
 
 " }}}1
 
@@ -2313,6 +2958,11 @@ function! s:init()
     if get(g:, 'loaded_vinegar', 0) && maparg('-', 'n') != ''
         unmap -
     endif
+
+    " fix for unimpaired virtualedit
+    nnoremap [ov :<c-u>call <sid>virtualedit_all(1)<cr>
+    nnoremap ]ov :<c-u>call <sid>virtualedit_all(0)<cr>
+    nnoremap =ov :<c-u>call <sid>virtualedit_all(-1)<cr>
 
     " XXX testing
     if g:rc_disable_youcompleteme
