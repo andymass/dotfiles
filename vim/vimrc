@@ -31,7 +31,7 @@
 " \J            Join with commas
 " \k
 " \l            vimtex mappings
-" \m            enable modeline & reload (TODO)
+" \m            parse modelines
 " \n            Narrow region
 " \o            CtrlP (all files in directory)
 " \p            CtrlP buffers
@@ -80,7 +80,7 @@
 "   - automatic indent / modelines
 "   - supertab chain?
 "   - what is setting up bracketed paste?
-"   - window management
+"   - window management (dwm.vim/goldenview/etc)
 "   - map for :Trim
 "   - vim-devicons
 "   - fmt equalprg vs q
@@ -89,6 +89,7 @@
 "   - better increment/decrement
 "   - clipbrd/tregisters
 "   - tags gutentags vs highlighting (easytags/taghighlight)
+"   - vis.vim?
 
 " }}}1
 
@@ -170,6 +171,7 @@ endif
 
 " use ag for grepping
 if executable('ag')
+
     " xxx experimental
     function! QF_reshow()
         if &buftype isnot '' | return | endif
@@ -190,18 +192,20 @@ if executable('ag')
             return
         endif
 
-        let l:lnum = line('.')
-        let l:bufnr = bufnr('')
+        let [l:lnum, l:bufnr] = [ line('.'), bufnr('') ]
 
+        " open or jump to quickfix window
         copen
 
+        " get the corresponding quickfix line
         let l:qfln = map(getqflist(), 'v:val.bufnr == '.l:bufnr
                     \ . '&& v:val.lnum == ' .l:lnum )
         let l:qfln = index(l:qfln, 1)+1
         if l:qfln > 0
+            " go to line and ensure folds are open
             execute 'normal! '.l:qfln.'ggzv'
 
-            " this jumps back to the previous buffer
+            " this naturally jumps back to the previous buffer
             execute 'cc '.l:qfln
         endif
 
@@ -212,21 +216,38 @@ if executable('ag')
         \ --column\ --follow\ -C0\ -W120
     set grepformat=%f:%l:%c:%m
 
-    function! s:ag_do(str)
+    function! s:ag_do(qargs)
+        let l:t_te = &t_te
+        let l:t_ti = &t_ti
+        set t_te= t_ti=
+
+        exe 'silent! grep!' a:qargs
+
+        let l:ecmd = escape('Ag ' . a:qargs, '#%|')
+        call s:ag_do_qf(':'.l:ecmd)
+        call histadd('cmd', l:ecmd)
+
+        redraw!
+
+        let &t_te = l:t_te
+        let &t_ti = l:t_ti
     endfunction
 
     " xxx don't switch to alternate terminal (t_ti/t_te)
     " xxx make this a function
-    command! -nargs=+ -complete=file -bar Ag silent! grep! <args>
-        \ | call histadd('cmd', escape('Ag '.<q-args>, '#%|'))
-        \ | call s:ag_do_qf(escape(':Ag '.<q-args>, '#%|'))
-        \ | redraw!
+    " command! -nargs=+ -complete=file -bar Ag silent! grep! <args>
+    "     \ | call histadd('cmd', escape('Ag '.<q-args>, '#%|'))
+    "     \ | call s:ag_do_qf(escape(':Ag '.<q-args>, '#%|'))
+    "     \ | redraw!
+
+    " command! -nargs=+ -complete=file -bar Ag silent! grep! <args>
+    "     \ | redraw!
+    
+    command! -nargs=+ -complete=file -bar Ag call s:ag_do(<q-args>)
+
 endif
 
 if exists(':Ag')
-    " function! s:Ag_cword()  " XXX this doesn't actually work..
-    "     return escape(shellescape(expand("<cword>"),1),'\|#%')
-    " endfunction
     function! s:ag_cword()
         return escape(shellescape(expand("<cword>"), 1), '#%|')
     endfunction
@@ -309,7 +330,7 @@ function! s:mostshift()
     let l:most = []
     if !filereadable(@%) | return [0, []] | endif
     try
-        let l:most = split(system('mostshift '.@%), '\_s\+')
+        let l:most = split(system("mostshift '".@%."'"), '\_s\+')
     endtry
 
     let l:sw = 0
@@ -756,7 +777,10 @@ let g:airline#extensions#vimtex#right = ")"
 
 let g:airline_section_error = ''  " temporary, to hide red arrow
 let g:airline_section_warning = ''
-let g:airline_skip_empty_sections = 1
+
+" XXX keep this on because it screws up quickfix airline
+" alternatively, play with qf sections to fix
+let g:airline_skip_empty_sections = 0
 
 let g:airline_detect_spelllang = 0
 
@@ -1667,19 +1691,20 @@ function! GetBufferList()
 endfunction
 
 " toggle either the quickfix or location windows 
+" xxx needs work
 function! ToggleList(bufname, pfx)
     let buflist = GetBufferList()
     for bufnum in map(filter(split(buflist, '\n'), 
             \ 'v:val =~ "'.a:bufname.'"'), 
             \ 'str2nr(matchstr(v:val, "\\d\\+"))')
-        if bufwinnr(bufnum) != -1
+        if bufwinnr(bufnum) != -1 && !(a:pfx == 'l' && len(getloclist(0)) == 0)
             exec(a:pfx.'close')
             return
         endif
     endfor
     if a:pfx == 'l' && len(getloclist(0)) == 0
         echohl ErrorMsg
-        echo "Location List is Empty."
+        echo "Location list is empty."
         echohl None
         return
     endif
@@ -1691,8 +1716,8 @@ function! ToggleList(bufname, pfx)
 endfunction
 
 
-
-command! Bind windo setl scrollbind | setl cursorbind | setl cursorline
+command! Bind windo setl scrollbind cursorbind cursorline
+command! Unbind windo setl noscrollbind nocursorbind nocursorline
 
 " folding
 set foldmethod=marker
@@ -1844,13 +1869,108 @@ endfunction
 " like :!, but operate on visual selection instead of lines
 function! Vexecute(bang, args) range
     if empty(a:args) | return | endif
+    let l:bang = a:bang ? 1 : 0 
+    let l:args = a:args
+
+    " ignore the first bang
+    if !l:bang && l:args =~ '^\s*!'
+        let l:args = substitute(l:args, '!', '', '')
+        let l:bang = 1
+    endif
+
+    " use register z temporarily
+    let l:old_z = @z
     normal! gv"zy
-    let l:out = system(a:args, @z)
+    let l:out = system(l:args, @z)
     let l:out = substitute(l:out, '\n$', '', '')
     call setreg('z', l:out, visualmode())
     normal! gv"zp
+    let @z = l:old_z
 endfunction
 command! -bang -range=0 -nargs=* -complete=shellcmd V call Vexecute(<bang>0, <q-args>)
+
+" in visual block mode, filter defaults to Vexecute 
+xnoremap <expr> ! mode() == "\<c-v>" ? ':V!' : '!'
+
+" tex increment option ('' = \relax)
+let g:tex_big_list = [ '', '\big', '\Big', '\bigg', '\Bigg' ]
+function! TexOptionIncrement(dir)
+    let l:cur = vimtex#cmd#get_current()
+    if empty(l:cur) | return 0 | endif
+
+    " handles the case where cursor is on [\big]
+    if index(g:tex_big_list, l:cur.text) >= 0
+        let l:cur = vimtex#cmd#get_at([l:cur.pos_end.lnum, 
+            \ l:cur.pos_end.cnum+1])
+        if empty(l:cur) | return 0 | endif
+    endif
+
+    let l:direction = a:dir < 0 ? -v:count1 : v:count1
+
+    " if already has [something]
+    if !empty(l:cur.opt)
+        let l:opttext = substitute(l:cur.opt.text, '\s\+$', '', '')
+        let l:idx = index(g:tex_big_list, l:opttext)
+        if l:idx < 0 | return 0 | endif
+
+        let l:idx2 = (l:idx+l:direction) % len(g:tex_big_list)
+        let l:new = g:tex_big_list[l:idx2]
+
+        let l:start = l:cur.opt.open.cnum
+        let l:end = l:cur.opt.close.cnum-1
+
+        if !strlen(l:new)
+            let l:start -= 1
+            let l:end += 1
+        endif
+    else
+        let l:idx2 = (0+l:direction) % len(g:tex_big_list)
+        let l:new = l:idx2 > 0 ? '['.g:tex_big_list[l:idx2].']' : ''
+        let l:start = len(l:cur.args) ? l:cur.args[0].open.cnum-1
+            \ : l:cur.pos_end.cnum
+        let l:end = l:start
+    endif
+
+    let l:pos = getcurpos()
+    let l:line = getline('.')
+    let l:before_text = strpart(l:line,0,l:start)
+    let l:after_text = strpart(l:line,l:end)
+    silent call setline('.',l:before_text.l:new.l:after_text)
+    call setpos("'[",[0,line('.'),strlen(l:before_text)+1,0])
+    call setpos("']",[0,line('.'),l:start+strlen(l:new),0])
+
+    if l:pos[2] > l:start
+        let l:newcol = l:pos[2] + strlen(l:new) - (l:end - l:start)
+        let l:pos[2] = max([l:start, l:newcol])
+        let l:pos[4] = l:pos[2]
+        call setpos('.', l:pos)
+    endif
+
+    silent! call repeat#set("\<plug>".'(tex-opt-'
+        \ .(a:dir < 0 ? 'decr' : 'incr').')', v:count)
+
+    return 1
+endfunction
+
+
+" function to explain the different highlights for spelling errors
+function! s:SpellLegend()
+    for [l:group, l:explanation] in [
+    \   ['SpellBad', 'word not recognized'],
+    \   ['SpellCap', 'word not capitalized'],
+    \   ['SpellRare', 'rare word'],
+    \   ['SpellLocal', 'wrong spelling for selected region']
+    \]
+        echo ''
+        echon l:group . "\t"
+        execute 'echohl' l:group
+        echon 'xxx'
+        echohl None
+        echon "\t" . l:explanation
+    endfor
+endfunction
+command! -bar SpellLegend call s:SpellLegend()
+
 
 " }}}1
 
@@ -1919,7 +2039,7 @@ function! s:rc_pre_filetype_tex_maps()
     xmap <silent><buffer> SD <plug>(vimtex-delim-toggle-modifier-reverse)
     nmap <silent><buffer> cse* <plug>(vimtex-env-toggle-star)
     nmap <silent><buffer> csc* <plug>(vimtex-cmd-toggle-star)
-    " alternative maps cd, cD, co, cO, csd+/-?
+    " xxx find alternative maps.. cd, cD, co, cO, csd+/-?
 
 endfunction
 function! s:rc_post_filetype_tex_maps()
@@ -1947,7 +2067,6 @@ augroup rc_filetype_tex
 
     autocmd User PreFileType_tex call s:rc_pre_filetype_tex_maps()
     autocmd FileType tex call s:rc_post_filetype_tex_maps()
-
 augroup END
 
 " matlab
@@ -1969,7 +2088,8 @@ augroup rc_filetype_qf
         \ foldlevel=0 foldmethod=expr foldcolumn=1 foldopen+=jump
         \ foldexpr=QuickFixFold()
     autocmd FileType qf nnoremap <silent><buffer> q :<c-u>bd<cr>
-    autocmd FileType qf nnoremap <cr> :exe 'wincmd p \| '.line('.').'cc'<cr>
+    " autocmd FileType qf nnoremap <cr> :exe 'wincmd p \| '.line('.').'cc'<cr>
+    " syn match Error /\f\+\// conceal cchar=…
 augroup END
     
 " vim
@@ -2295,65 +2415,6 @@ nmap <silent> cO <plug>(tex-opt-decr)
 " vnoremap g<c-k> g<c-a>
 " vnoremap g<c-j> g<c-x>
 
-" tex increment option ('' = \relax)
-let g:tex_big_list = [ '', '\big', '\Big', '\bigg', '\Bigg' ]
-function! TexOptionIncrement(dir)
-    let l:cur = vimtex#cmd#get_current()
-    if empty(l:cur) | return 0 | endif
-
-    " handles the case where cursor is on [\big]
-    if index(g:tex_big_list, l:cur.text) >= 0
-        let l:cur = vimtex#cmd#get_at([l:cur.pos_end.lnum, 
-            \ l:cur.pos_end.cnum+1])
-        if empty(l:cur) | return 0 | endif
-    endif
-
-    let l:direction = a:dir < 0 ? -v:count1 : v:count1
-
-    " if already has [something]
-    if !empty(l:cur.opt)
-        let l:opttext = substitute(l:cur.opt.text, '\s\+$', '', '')
-        let l:idx = index(g:tex_big_list, l:opttext)
-        if l:idx < 0 | return 0 | endif
-
-        let l:idx2 = (l:idx+l:direction) % len(g:tex_big_list)
-        let l:new = g:tex_big_list[l:idx2]
-
-        let l:start = l:cur.opt.open.cnum
-        let l:end = l:cur.opt.close.cnum-1
-
-        if !strlen(l:new)
-            let l:start -= 1
-            let l:end += 1
-        endif
-    else
-        let l:idx2 = (0+l:direction) % len(g:tex_big_list)
-        let l:new = l:idx2 > 0 ? '['.g:tex_big_list[l:idx2].']' : ''
-        let l:start = len(l:cur.args) ? l:cur.args[0].open.cnum-1
-            \ : l:cur.pos_end.cnum
-        let l:end = l:start
-    endif
-
-    let l:pos = getcurpos()
-    let l:line = getline('.')
-    let l:before_text = strpart(l:line,0,l:start)
-    let l:after_text = strpart(l:line,l:end)
-    silent call setline('.',l:before_text.l:new.l:after_text)
-    call setpos("'[",[0,line('.'),strlen(l:before_text)+1,0])
-    call setpos("']",[0,line('.'),l:start+strlen(l:new),0])
-
-    if l:pos[2] > l:start
-        let l:newcol = l:pos[2] + strlen(l:new) - (l:end - l:start)
-        let l:pos[2] = max([l:start, l:newcol])
-        let l:pos[4] = l:pos[2]
-        call setpos('.', l:pos)
-    endif
-
-    silent! call repeat#set("\<plug>".'(tex-opt-'
-        \ .(a:dir < 0 ? 'decr' : 'incr').')', v:count)
-
-    return 1
-endfunction
 
 " function s:SID()
 "     return matchstr(expand('<sfile>'), '<SNR>\zs\d\+\ze_SID$')
@@ -2484,6 +2545,9 @@ nnoremap <silent> <leader>* :call SearchWord() \| set hlsearch<cr>
 " change cursor word and load search to quickly change occurrences
 " dot can be used to repeat the search+change combo
 nnoremap <leader>c :call SearchWord() \| set hlsearch<cr>cgn
+
+" search for last small delete text
+nnoremap z/ /<c-r>-<cr>
 
 " xxx experimental
 " nnoremap <silent> <space>+
@@ -2932,6 +2996,24 @@ xnoremap <expr> <c-k> <sid>vcol_updown(1)
 " Konsole does not support this particular escape sequence
 " if g:rc_term_konsole
 set t_SH=
+
+let &t_8f = "\<Esc>[38;2;%lu;%lu;%lum"
+let &t_8b = "\<Esc>[48;2;%lu;%lu;%lum"
+
+" useful after doing grep
+function! Bwipeunlisted()
+    let l:bufs = filter(range(1, bufnr('$')), 'bufexists(v:val)')
+    call filter(l:bufs, '!buflisted(v:val)')
+    let l:count = 0
+    for l:i in l:bufs
+        let l:count += 1
+        silent execute 'bwipeout' l:i
+    endfor
+    if l:count > 0
+        echo l:count 'buffers wiped out'
+    endif
+endfunction
+command! Bwipeunlisted call Bwipeunlisted()
 
 " }}}1
 
