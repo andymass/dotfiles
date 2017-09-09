@@ -167,6 +167,9 @@ set infercase
 
 set nosol
 
+" disable intro
+set shortmess+=I
+
 " under ssh, disable clipboard to make things faster
 if $SSH_CLIENT != ''
     set clipboard=exclude:.*
@@ -174,20 +177,6 @@ endif
 
 " use ag for grepping
 if executable('ag')
-
-    " xxx experimental
-    function! QF_reshow()
-        if &buftype isnot '' | return | endif
-        let l:win = filter(getwininfo(),
-            \ 'v:val.quickfix && !v:val.loclist')
-        if !empty(l:win)
-            exe l:win[0].winnr.'windo normal! zMzv'
-        endif
-    endfunction
-    augroup qf_something
-        au!
-        " au BufWinEnter * call QF_reshow()
-    augroup END
 
     function! s:ag_do_qf(title)
         if empty(getqflist())
@@ -348,10 +337,8 @@ function! s:mostshift()
     return [l:sw, l:flags]
 endfunction
 
-" XXX! switch to bufreadpost or somethign
-" this is called when switchig iwndows
-" maybe make self-destructing?
-
+" note: unlike BufReadPost this is called each time when switching 
+" windows, so we use a buffer flag to prevent multiple
 function! s:end_bufenter_hook()
     if !get(b:, 'do_end_bufenter_hook', 0) | return | endif
     let b:do_end_bufenter_hook = 0
@@ -365,7 +352,7 @@ function! s:end_bufenter_hook()
     if l:sw > 0
         let &shiftwidth = l:sw
         let &tabstop = l:sw
-        if !&et | set et | endif
+        if !&et | setl et | endif
     endif
 
     " file uses a mix of tabs and spaces
@@ -380,7 +367,7 @@ function! s:install_end_bufenter_hook(enabled)
         autocmd!
         if a:enabled
             " xxx should we use nested here?
-            autocmd BufEnter * call s:end_bufenter_hook()
+            autocmd BufEnter * nested call s:end_bufenter_hook()
         endif
     augroup END
 endfunction
@@ -474,9 +461,6 @@ if !has("gui_running")
     hi Normal ctermbg=none
 end
 
-" disable intro
-set shortmess+=I
-
 " }}}1
 
 " ────────────────────────────────────────────────────────────────────────
@@ -492,6 +476,22 @@ set shortmess+=I
 " clipbrd {{{2
 "
 let g:no_clipbrd_maps = 1
+
+" }}}2
+
+" narrow region {{{2
+
+let g:nrrw_rgn_nomap_nr = 1
+let g:nrrw_rgn_nomap_Nr = 1
+
+xmap <leader>n <Plug>NrrwrgnDo
+nmap <silent> <leader>n <Plug>NrrwrgnDo
+
+" }}} 2
+
+" scratch {{{2
+
+let g:scratch_autohide = 1
 
 " }}}2
 
@@ -593,6 +593,119 @@ augroup vimtex_clean_viewers
     autocmd User VimtexEventQuit call VimtexCloseViewer()
 augroup END
 
+" vimtex delims {{{3
+
+let g:vimtex_delim_list = {'mods' : {}, 'delim_tex': {}, 
+      \ 'delim_math': {} }
+
+let g:vimtex_delim_list.mods.name = [
+      \ ['\left', '\right'],
+      \ ['\mleft', '\mright'],
+      \ ['\bigl', '\bigr'],
+      \ ['\Bigl', '\Bigr'],
+      \ ['\biggl', '\biggr'],
+      \ ['\Biggl', '\Biggr'],
+      \]
+let g:vimtex_delim_toggle_mod_list = [
+      \ ['\bigl', '\bigr'],
+      \ ['\Bigl', '\Bigr'],
+      \ ['\biggl', '\biggr'],
+      \ ['\Biggl', '\Biggr'],
+      \]
+
+let g:vimtex_delim_list.delim_tex.name = [
+      \ ['[', ']'],
+      \ ['{', '}'],
+      \ ['``', "''"],
+      \ ['`', "'"],
+      \]
+
+let g:vimtex_delim_list.delim_math.name = [
+      \ ['(', ')'],             ['\{', '\}'], 
+      \ ['\lvert', '\rvert'],   ['\lVert', '\rVert'],
+      \ ['\lfloor', '\rfloor'], ['\lceil', '\rceil'],
+      \ ['\langle', '\rangle'], ['\ulcorner', '\urcorner'],
+      \ ['[', ']'],
+      \]
+let g:vimtex_delim_list.delim_math.re = [
+      \ ['(', ')'],             ['\\{', '\\}'], 
+      \ ['\\lvert', '\\rvert'],   ['\\lVert', '\\rVert'],
+      \ ['\\lfloor', '\\rfloor'], ['\\lceil', '\\rceil'],
+      \ ['\\langle', '\\rangle'], ['\\ulcorner', '\\urcorner'],
+      \ ['\\\@<!\[', '\]'],
+      \]
+
+" }}}3
+
+let g:vimtex_compiler_latexmk = {
+    \   'backend'    : 'jobs',
+    \   'background' : 1,
+    \   'continuous' : 0, 
+    \   'callback'   : 0
+    \}
+
+let g:vimtex_view_automatic = 0
+let g:vimtex_view_method = 'zathura'
+let g:vimtex_quickfix_open_on_warning = 0
+
+let g:vimtex_quickfix_latexlog = {
+    \ 'overfull' : 0,
+    \ 'underfull' : 0,
+    \}
+
+let g:vimtex_format_enabled = 1
+
+
+" xxx make tex <buffer> only!
+" nnoremap <silent> <plug>(vimtex-delim-toggle-modifier-reverse)
+"     \ :call vimtex#delim#toggle_modifier(-1)<cr>
+
+" let g:vimtex_latexmk_continuous = 0
+" let g:vimtex_latexmk_background = 1
+" let g:vimtex_quickfix_ignore_all_warnings = 0
+" let g:vimtex_latexmk_build_dir='build'
+" function! SetBuildDir()
+ "    let g:vimtex_latexmk_build_dir='build'
+" endfunction
+" augroup vimtex_config
+ "    au!
+ "    au User VimtexEventInitPost call SetBuildDir()
+" augroup END
+
+
+function! s:latexSurround()
+   let b:surround_{char2nr("e")}
+     \ = "\\begin{\1environment: \1}\n\t\r\n\\end{\1\1}"
+   let b:surround_{char2nr("c")} = "\\\1command: \1{\r}"
+endfunction
+
+
+function! VimtexHelpLookup()
+    let l:start = vimtex#complete#omnifunc(1, [])
+    let l:cword = expand('<cword>')
+    let l:cword = substitute(l:cword, '^\\', '', '')
+    let l:candidates = vimtex#complete#omnifunc(0, l:cword.'\>')
+    if empty(l:candidates)
+        echom 'nothing'
+    else
+        let l:pkgname = matchlist(l:candidates[0].menu, 
+            \ '\v\[cmd:\s+(.+)\]')[1]
+        echom l:pkgname
+    end
+endfunction
+
+
+" nnoremap K :call VimtexHelpLookup()<cr>
+
+
+" xxx this is bad, fix
+" let g:ycm_semantic_triggers.text = [ 
+"     \ 're!:arrow',
+"     \ ]
+
+" CompleteDone
+" set completefunc=emoji#complete
+
 
 " augroup vimtex_config
 "     au!
@@ -608,12 +721,6 @@ augroup END
     " au VimLeavePre * call VimtexCleanViewers()
     " au User VimtexEventQuit call VimtexCleanViewers()
     " au User VimtexEventQuit echo 'vimtex quitting '.b:vimtex.tex | sleep 400m
-
-" }}}2
-
-" scratch {{{2
-
-let g:scratch_autohide = 1
 
 " }}}2
 
@@ -999,198 +1106,6 @@ function! OpenLog()
     execute 'split '.mfnlog
 endfunction
 
-" vdebug
-let g:vdebug_keymap = {
-    \    "run" : "<F13>", 
-    \    "run_to_cursor" : "<Leader>R",
-    \    "step_over" : "<F2>",
-    \    "step_into" : "<F3>",
-    \    "step_out" : "<F4>",
-    \    "close" : "<Leader>c",
-    \    "detach" : "<F7>",
-    \    "set_breakpoint" : "<F10>",
-    \    "get_context" : "<Leader>w",
-    \    "eval_under_cursor" : "<Leader>v",
-    \    "eval_visual" : "<Leader>e",
-    \}
-
-
-" vimtex
-let g:vimtex_delim_list = {'mods' : {}, 'delim_tex': {}, 
-      \ 'delim_math': {} }
-
-let g:vimtex_delim_list.mods.name = [
-      \ ['\left', '\right'],
-      \ ['\mleft', '\mright'],
-      \ ['\bigl', '\bigr'],
-      \ ['\Bigl', '\Bigr'],
-      \ ['\biggl', '\biggr'],
-      \ ['\Biggl', '\Biggr'],
-      \]
-let g:vimtex_delim_toggle_mod_list = [
-      \ ['\bigl', '\bigr'],
-      \ ['\Bigl', '\Bigr'],
-      \ ['\biggl', '\biggr'],
-      \ ['\Biggl', '\Biggr'],
-      \]
-
-let g:vimtex_delim_list.delim_tex.name = [
-      \ ['[', ']'],
-      \ ['{', '}'],
-      \ ['``', "''"],
-      \ ['`', "'"],
-      \]
-
-let g:vimtex_delim_list.delim_math.name = [
-      \ ['(', ')'],             ['\{', '\}'], 
-      \ ['\lvert', '\rvert'],   ['\lVert', '\rVert'],
-      \ ['\lfloor', '\rfloor'], ['\lceil', '\rceil'],
-      \ ['\langle', '\rangle'], ['\ulcorner', '\urcorner'],
-      \ ['[', ']'],
-      \]
-let g:vimtex_delim_list.delim_math.re = [
-      \ ['(', ')'],             ['\\{', '\\}'], 
-      \ ['\\lvert', '\\rvert'],   ['\\lVert', '\\rVert'],
-      \ ['\\lfloor', '\\rfloor'], ['\\lceil', '\\rceil'],
-      \ ['\\langle', '\\rangle'], ['\\ulcorner', '\\urcorner'],
-      \ ['\\\@<!\[', '\]'],
-      \]
-
-let g:vimtex_compiler_latexmk = {
-    \   'backend'    : 'jobs',
-    \   'background' : 1,
-    \   'continuous' : 0, 
-    \   'callback'   : 0
-    \}
-
-" xxx make tex <buffer> only!
-" nnoremap <silent> <plug>(vimtex-delim-toggle-modifier-reverse)
-"     \ :call vimtex#delim#toggle_modifier(-1)<cr>
-
-let g:vimtex_view_automatic = 0
-let g:vimtex_view_method = 'zathura'
-let g:vimtex_quickfix_open_on_warning = 0
-
-let g:vimtex_quickfix_latexlog = {
-    \ 'overfull' : 0,
-    \ 'underfull' : 0,
-    \}
-
-let g:vimtex_format_enabled = 1
-
-
-" let g:vimtex_latexmk_continuous = 0
-" let g:vimtex_latexmk_background = 1
-" let g:vimtex_quickfix_ignore_all_warnings = 0
-" let g:vimtex_latexmk_build_dir='build'
-" function! SetBuildDir()
- "    let g:vimtex_latexmk_build_dir='build'
-" endfunction
-" augroup vimtex_config
- "    au!
- "    au User VimtexEventInitPost call SetBuildDir()
-" augroup END
-
-" zotero + betterbibtex
-augroup filetype_tex_b
-    autocmd!
-    autocmd FileType tex nnoremap <buffer> <silent> <leader>c :r!cite<cr>
-    autocmd Filetype tex nmap <buffer> <silent> K <plug>(vimtex-doc-package)
-augroup END
-
-" vimtex + surround
-augroup latex_surround
-   autocmd!
-   autocmd FileType tex call s:latexSurround()
-augroup END
-
-function! s:latexSurround()
-   let b:surround_{char2nr("e")}
-     \ = "\\begin{\1environment: \1}\n\t\r\n\\end{\1\1}"
-   let b:surround_{char2nr("c")} = "\\\1command: \1{\r}"
-endfunction
-
-" ycm + tex: assumes vimtex's omnifunc
-if !exists('g:ycm_semantic_triggers')
-    let g:ycm_semantic_triggers = {}
-endif
-let g:ycm_semantic_triggers.tex = [
-    \ 're!\\[A-Za-z]*cite[A-Za-z]*(\[[^]]*\]){0,2}{[^}]*',
-    \ 're!\\[A-Za-z]*ref({[^}]*|range{([^,{}]*(}{)?))',
-    \ 're!\\hyperref\[[^]]*',
-    \ 're!\\includegraphics\*?(\[[^]]*\]){0,2}{[^}]*',
-    \ 're!\\(include(only)?|input){[^}]*',
-    \ 're!\\\a*(gls|Gls|GLS)(pl)?\a*(\s*\[[^]]*\]){0,2}\s*\{[^}]*',
-    \ 're!\\includepdf(\s*\[[^]]*\])?\s*\{[^}]*',
-    \ 're!\\includestandalone(\s*\[[^]]*\])?\s*\{[^}]*',
-    \ 're!\\usepackage(\s*\[[^]]*\])?\s*\{[^}]*',
-    \ 're!\\documentclass(\s*\[[^]]*\])?\s*\{[^}]*',
-    \ 're!\\[A-Za-z]*',
-    \ ]
-
-" let g:ycm_min_num_of_chars_for_completion = 99
-" let g:ycm_cache_omnifunc = 0
-
-" youcompleteme
-
-let g:ycm_semantic_triggers.text = [
-    \ 're!:[A-Za-z]*',
-    \ ]
-
-let g:ycm_key_invoke_completion = '<f19>'
-" let g:ycm_cache_omnifunc = 0
-
-let g:ycm_key_detailed_diagnostics = '<f2>'
-
-function! VimtexHelpLookup()
-    let l:start = vimtex#complete#omnifunc(1, [])
-    let l:cword = expand('<cword>')
-    let l:cword = substitute(l:cword, '^\\', '', '')
-    let l:candidates = vimtex#complete#omnifunc(0, l:cword.'\>')
-    if empty(l:candidates)
-        echom 'nothing'
-    else
-        let l:pkgname = matchlist(l:candidates[0].menu, 
-            \ '\v\[cmd:\s+(.+)\]')[1]
-        echom l:pkgname
-    end
-endfunction
-
-  let g:ycm_show_diagnostics_ui = 0
-
-" nnoremap K :call VimtexHelpLookup()<cr>
-
-
-" xxx this is bad, fix
-" let g:ycm_semantic_triggers.text = [ 
-"     \ 're!:arrow',
-"     \ ]
-
-" CompleteDone
-" set completefunc=emoji#complete
-
-" youcompleteme {{{2
-
-let g:ycm_global_ycm_extra_conf = '~/.vim/.ycm_extra_conf.py'
-
-let g:ycm_autoclose_preview_window_after_completion = 1
-
-let g:ycm_filetype_blacklist = {
-    \ 'tagbar'   : 1,
-    \ 'qf'       : 1,
-    \ 'notes'    : 1,
-    \ 'markdown' : 1,
-    \ 'unite'    : 1,
-    \ 'vimwiki'  : 1,
-    \ 'pandoc'   : 1,
-    \ 'infolog'  : 1,
-    \ 'mail'     : 1,
-    \ 'netrw'    : 1,
-    \ 'css'      : 1,
-    \ }
-
-" }}}2
-
 " CtrlP {{{2
 let g:ctrlp_extensions = [ 'tag', 'quickfix' ]
     " 'tag', 'buffertag', 'quickfix', 'dir', 'rtscript',
@@ -1228,13 +1143,88 @@ let g:ctrlp_working_path_mode = 'ca'
 
 " }}}2
 
-" markdown (@gabrielelana, @ibabushkin)
-let g:markdown_enable_mappings = 0
-
 " Figlet {{{2
 
 let g:figletFontDir='/usr/share/figlet/fonts'
 let g:figletFont='slant'
+
+" }}}2
+
+" markdown (@gabrielelana, @ibabushkin) {{{2
+
+let g:markdown_enable_mappings = 0
+
+" }}}2
+
+" vdebug {{{2
+
+let g:vdebug_keymap = {
+    \    "run" : "<F13>", 
+    \    "run_to_cursor" : "<Leader>R",
+    \    "step_over" : "<F2>",
+    \    "step_into" : "<F3>",
+    \    "step_out" : "<F4>",
+    \    "close" : "<Leader>c",
+    \    "detach" : "<F7>",
+    \    "set_breakpoint" : "<F10>",
+    \    "get_context" : "<Leader>w",
+    \    "eval_under_cursor" : "<Leader>v",
+    \    "eval_visual" : "<Leader>e",
+    \}
+
+" }}}2
+
+" youcompleteme {{{2
+
+" ycm + tex: assumes vimtex's omnifunc
+if !exists('g:ycm_semantic_triggers')
+    let g:ycm_semantic_triggers = {}
+endif
+let g:ycm_semantic_triggers.tex = [
+    \ 're!\\[A-Za-z]*cite[A-Za-z]*(\[[^]]*\]){0,2}{[^}]*',
+    \ 're!\\[A-Za-z]*ref({[^}]*|range{([^,{}]*(}{)?))',
+    \ 're!\\hyperref\[[^]]*',
+    \ 're!\\includegraphics\*?(\[[^]]*\]){0,2}{[^}]*',
+    \ 're!\\(include(only)?|input){[^}]*',
+    \ 're!\\\a*(gls|Gls|GLS)(pl)?\a*(\s*\[[^]]*\]){0,2}\s*\{[^}]*',
+    \ 're!\\includepdf(\s*\[[^]]*\])?\s*\{[^}]*',
+    \ 're!\\includestandalone(\s*\[[^]]*\])?\s*\{[^}]*',
+    \ 're!\\usepackage(\s*\[[^]]*\])?\s*\{[^}]*',
+    \ 're!\\documentclass(\s*\[[^]]*\])?\s*\{[^}]*',
+    \ 're!\\[A-Za-z]*',
+    \ ]
+
+" let g:ycm_min_num_of_chars_for_completion = 99
+" let g:ycm_cache_omnifunc = 0
+
+" emoji
+let g:ycm_semantic_triggers.text = [
+    \ 're!:[A-Za-z]*',
+    \ ]
+
+let g:ycm_key_invoke_completion = '<f19>'
+
+let g:ycm_key_detailed_diagnostics = '<f2>'
+
+let g:ycm_show_diagnostics_ui = 0
+
+let g:ycm_global_ycm_extra_conf = '~/.vim/.ycm_extra_conf.py'
+
+let g:ycm_autoclose_preview_window_after_completion = 1
+
+let g:ycm_filetype_blacklist = {
+    \ 'tagbar'   : 1,
+    \ 'qf'       : 1,
+    \ 'notes'    : 1,
+    \ 'markdown' : 1,
+    \ 'unite'    : 1,
+    \ 'vimwiki'  : 1,
+    \ 'pandoc'   : 1,
+    \ 'infolog'  : 1,
+    \ 'mail'     : 1,
+    \ 'netrw'    : 1,
+    \ 'css'      : 1,
+    \ }
 
 " }}}2
 
@@ -1281,6 +1271,17 @@ let g:figletFont='slant'
 " echo g:loaded_syntastic_util_autoload
 " echo &runtimepath
 
+" tpope's commentary {{{2
+let g:commentary_map_backslash = 0
+" }}}2
+
+" latex-to-unicode provided by the julia plugin {{{2
+" let g:latex_to_unicode_file_types = ".*" = ["tex"]
+let g:latex_to_unicode_auto = 1
+let g:latex_to_unicode_eager = 1
+
+" }}}2
+
 " syntastic {{{2
 
 " chktex is a bit too noisy
@@ -1302,19 +1303,14 @@ let g:syntastic_mode_map = {
 
 " }}}2
 
-" latex-to-unicode provided by the julia plugin
-" let g:latex_to_unicode_file_types = ".*" = ["tex"]
-let g:latex_to_unicode_auto = 1
-let g:latex_to_unicode_eager = 1
+" makeshift {{{2
 
-" tpope's commentary
-let g:commentary_map_backslash = 0
-
-" makeshift
 " consider writing my own, makeshift uses set makeprg not :compiler
 " let g:makeshift_systems = {
 "     \   'latexmkrc': 'latexmk',
 "     \}
+
+" }}}2
 
 " XXX annoying mapping
 " map <unique> <Leader>hlt <Plug>HiLinkTrace
@@ -1349,30 +1345,6 @@ endfunction
 
 " need to use BufEnter or BufReadEnter for overrides
 
-" narrow region {{{2
-
-let g:nrrw_rgn_nomap_nr = 1
-let g:nrrw_rgn_nomap_Nr = 1
-
-xmap <leader>n <Plug>NrrwrgnDo
-nmap <silent> <leader>n <Plug>NrrwrgnDo
-
-" }}} 2
-
-
-" TagHighlightSettings
-function! UTTest()
-    if ! exists('g:TagHighlightSettings')
-        let g:TagHighlightSettings = {}
-    endif
-    let l:tf = tagfiles()
-    if !empty(l:tf)
-        let g:TagHighlightSettings['TagFileName'] = l:tf[0]
-        exe 'UpdateTypesFileOnly'
-    else
-        let g:TagHighlightSettings['TagFileName'] = ''
-    endif
-endfunction
 
 " }}}1
 
@@ -1457,7 +1429,7 @@ endfor
 
 " autocmd User PreFileType_ALL call s:set_ycm_triggers(expand("<amatch>"))
 
-" allow page-up/page-down in the completion menu (XXX broken)
+" allow page-up/page-down in the completion menu (XXX needs testing)
 inoremap <silent> <expr> <c-u> pumvisible() ? "\<pageup>"   : "\<c-u>"
 inoremap <silent> <expr> <c-d> pumvisible() ? "\<pagedown>" : "\<c-d>"
 
@@ -2016,7 +1988,7 @@ command! -bar SpellLegend call s:SpellLegend()
 " ────────────────────────────────────────────────────────────────────────
 " file types {{{1
 
-" this is called before ftplugin stuff so custom maps 
+" this is called before ftplugin stuff so custom maps
 " can be defined on a per file type basis before plugins
 function! s:PreFTPlugin(ft)
     let l:pft = 'PreFileType_'
@@ -2028,8 +2000,8 @@ function! s:PreFTPlugin(ft)
     " xxx
     call s:set_ycm_triggers(a:ft)
 
-    " generic handler xxx this is overly complex, 
-    " just call the functions directly
+    " generic handler xxx this is overly complex,
+    " just call the functions directly?
     " echo 'be'.a:ft | sleep 1
     let l:au = l:pft.'ALL'
     if exists('#User#'.l:au)
@@ -2059,9 +2031,9 @@ function! s:rc_pre_filetype_tex_maps()
     imap <silent><buffer> <f26> <plug>(vimtex-delim-close)
 
     " change directory to tex root
-    nmap <silent><buffer> <leader>l.
+    nnoremap <silent><buffer> <leader>l.
         \ :<c-u>lcd <c-r>=b:vimtex.root<cr><cr>:pwd<cr>
-    nmap <silent><buffer> <leader>lg.
+    nnoremap <silent><buffer> <leader>lg.
         \ :<c-u>cd <c-r>=b:vimtex.root<cr><cr>:pwd<cr>
 
     " delimiter modifier toggling e.g., \big( -> \Big(
@@ -2083,6 +2055,10 @@ function! s:rc_post_filetype_tex_maps()
     if g:vimtex_imaps_leader == '`'
         inoremap <silent><buffer> `` ``
     endif
+
+    " update and compile
+    nnoremap <silent><buffer> <leader><bslash> :<c-u>up<cr>:VimtexCompile<cr>
+    nnoremap <silent><buffer> <F5> :<c-u>up<cr>:VimtexCompile<cr>
 endfunction
 
 augroup rc_filetype_tex
@@ -2102,6 +2078,14 @@ augroup rc_filetype_tex
 
     autocmd User PreFileType_tex call s:rc_pre_filetype_tex_maps()
     autocmd FileType tex call s:rc_post_filetype_tex_maps()
+
+    " zotero + betterbibtex (todo)
+    " autocmd FileType tex nnoremap <buffer> <silent> <leader>c :r!cite<cr>
+    " autocmd Filetype tex nmap <buffer> <silent> K <plug>(vimtex-doc-package)
+
+    " vimtex + surround
+    autocmd FileType tex call s:latexSurround()
+
 augroup END
 
 " matlab
@@ -2126,7 +2110,7 @@ augroup rc_filetype_qf
     " autocmd FileType qf nnoremap <cr> :exe 'wincmd p \| '.line('.').'cc'<cr>
     " syn match Error /\f\+\// conceal cchar=…
 augroup END
-    
+
 " vim
 augroup rc_filetype_vim
     au!
@@ -2220,16 +2204,6 @@ nnoremap gB :call <sid>hi_show()<cr>
 " zp  << map to window stuff?
 " zu
 " zy
-
-" latex
-augroup filetype_tex
-    autocmd!
-    autocmd FileType tex nnoremap <silent> <buffer> <leader><bslash>
-        \ :<c-u>up<cr>:VimtexCompile<cr>
-    autocmd FileType tex nnoremap <silent> <buffer> <F5>
-        \ :<c-u>up<cr>:VimtexCompile<cr>
-augroup END
-
 
 
 
@@ -2586,7 +2560,7 @@ nnoremap <silent> <leader># :call SearchWord() \| set hlsearch \| let v:searchfo
 nnoremap <leader>c :call SearchWord() \| set hlsearch<cr>cgn
 
 " search for last small delete text
-nnoremap z/ /<c-r>-<cr>
+" nnoremap z/ /<c-r>-<cr>
 
 " xxx experimental
 " nnoremap <silent> <space>+
@@ -2708,12 +2682,15 @@ endfunction
 set <a-,>=, <a-.>=.  <a-lt>=< <a-char-62>=>
 set <a-->=- <a-=>== <a-_>=_ <a-+>=+
 
+" shifted maps
 nnoremap <silent> <a-,> :vertical res -5<cr>
 nnoremap <silent> <a-.> :vertical res +5<cr>
-nnoremap <silent> <a-lt> :vertical res -1<cr>
-nnoremap <silent> <a-char-62> :vertical res +1<cr>
 nnoremap <silent> <a--> :res -3<cr>
 nnoremap <silent> <a-=> :res +3<cr>
+
+" unshifted maps
+nnoremap <silent> <a-lt> :vertical res -1<cr>
+nnoremap <silent> <a-char-62> :vertical res +1<cr>
 nnoremap <silent> <a-_> :res -1<cr>
 nnoremap <silent> <a-+> :res +1<cr>
 
@@ -2911,66 +2888,6 @@ endfunction
 command! Modelines call <sid>DoModelines()
 nnoremap <silent> <leader>m :<c-u>call <sid>DoModelines()<cr>
 
-"  XXX experimental
-function! ColumnLock()
-    if mode() != '' | return '' | endif
-
-    function! s:ColumnLock_Enable(state)
-        if !a:state | let g:column_lock = 0 | endif
-        augroup ColumnLock_augroup
-            au!
-            if a:state
-                au CursorMoved * call <sid>ColumnLock_CursorMoved()
-            endif
-        augroup END
-    endfunction
-
-    function! s:ColumnLock_CursorMoved()
-        if mode() != ''
-            call s:ColumnLock_Enable(0)
-            return
-        endif
-
-        if col('.') != g:column_lock
-            exe 'normal '.g:column_lock.'|'
-            " call cursor(0, g:column_lock)
-        endif
-    endfunction
-
-    let s:activate = !get(g:, 'column_lock', 0)
-    let g:column_lock = s:activate ? col('.') : 0
-    call s:ColumnLock_Enable(s:activate)
-
-    if s:activate
-        echo 'column locked'
-    else
-        echo 'column unlocked'
-    endif
-
-    return ''
-endfunction
-" nnoremap <expr> <leader>b ColumnLock()
-" xnoremap <expr> <leader>b ColumnLock()
-" function! s:vblock_rest()
-"     return col('v').'|'
-" endfunction
-"
-" this works:
-" function! s:vblock_store()
-"     let s:vblock_rest_col = col('.')
-"     echo "column stored\r"
-"     return ''
-" endfunction
-" function! s:vblock_rest()
-"     let l:c = get(s:, 'vblock_rest_col', 0)
-"     if l:c == 0
-"         return ''
-"     endif
-"     return l:c.'|'
-" endfunction
-" xnoremap <expr> <c-k> <sid>vblock_rest()
-" xnoremap <expr> <c-l> <sid>vblock_store()
-
 " go to column stored in mark without changing the line
 " if the mark is >, then selection is set to current column
 " if the mark is $, expand to longest line, textwidth, or winwidth
@@ -3041,10 +2958,12 @@ xnoremap <expr> <c-k> <sid>vcol_updown(1)
 " fix bug(?) in vim/Konsole
 " Konsole does not support this particular escape sequence
 " if g:rc_term_konsole
-set t_SH=
+" set t_SH=
 
-let &t_8f = "\<Esc>[38;2;%lu;%lu;%lum"
-let &t_8b = "\<Esc>[48;2;%lu;%lu;%lum"
+if &term =~ '^konsole'
+    let &t_8f = "\<Esc>[38;2;%lu;%lu;%lum"
+    let &t_8b = "\<Esc>[48;2;%lu;%lu;%lum"
+endif
 
 " useful after doing grep
 function! Bwipeunlisted()
@@ -3060,6 +2979,94 @@ function! Bwipeunlisted()
     endif
 endfunction
 command! Bwipeunlisted call Bwipeunlisted()
+
+"  XXX experimental
+function! ColumnLock()
+    if mode() != '' | return '' | endif
+
+    function! s:ColumnLock_Enable(state)
+        if !a:state | let g:column_lock = 0 | endif
+        augroup ColumnLock_augroup
+            au!
+            if a:state
+                au CursorMoved * call <sid>ColumnLock_CursorMoved()
+            endif
+        augroup END
+    endfunction
+
+    function! s:ColumnLock_CursorMoved()
+        if mode() != ''
+            call s:ColumnLock_Enable(0)
+            return
+        endif
+
+        if col('.') != g:column_lock
+            exe 'normal '.g:column_lock.'|'
+            " call cursor(0, g:column_lock)
+        endif
+    endfunction
+
+    let s:activate = !get(g:, 'column_lock', 0)
+    let g:column_lock = s:activate ? col('.') : 0
+    call s:ColumnLock_Enable(s:activate)
+
+    if s:activate
+        echo 'column locked'
+    else
+        echo 'column unlocked'
+    endif
+
+    return ''
+endfunction
+" nnoremap <expr> <leader>b ColumnLock()
+" xnoremap <expr> <leader>b ColumnLock()
+" function! s:vblock_rest()
+"     return col('v').'|'
+" endfunction
+"
+" this works:
+" function! s:vblock_store()
+"     let s:vblock_rest_col = col('.')
+"     echo "column stored\r"
+"     return ''
+" endfunction
+" function! s:vblock_rest()
+"     let l:c = get(s:, 'vblock_rest_col', 0)
+"     if l:c == 0
+"         return ''
+"     endif
+"     return l:c.'|'
+" endfunction
+" xnoremap <expr> <c-k> <sid>vblock_rest()
+" xnoremap <expr> <c-l> <sid>vblock_store()
+
+" TagHighlightSettings
+function! UTTest()
+    if ! exists('g:TagHighlightSettings')
+        let g:TagHighlightSettings = {}
+    endif
+    let l:tf = tagfiles()
+    if !empty(l:tf)
+        let g:TagHighlightSettings['TagFileName'] = l:tf[0]
+        exe 'UpdateTypesFileOnly'
+    else
+        let g:TagHighlightSettings['TagFileName'] = ''
+    endif
+endfunction
+
+" xxx experimental
+function! QF_reshow()
+    if &buftype isnot '' | return | endif
+    let l:win = filter(getwininfo(),
+        \ 'v:val.quickfix && !v:val.loclist')
+    if !empty(l:win)
+        exe l:win[0].winnr.'windo normal! zMzv'
+    endif
+endfunction
+augroup qf_something
+    au!
+    " au BufWinEnter * call QF_reshow()
+augroup END
 
 " }}}1
 
