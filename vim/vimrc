@@ -1002,7 +1002,7 @@ let g:gutentags_project_root = [ 'latexmkrc' ]
 let g:gutentags_generate_on_missing = 0
 let g:gutentags_generate_on_new = 0
 let g:gutentags_generate_on_write = 1
-let g:gutentags_cache_dir = '/home/andy/.cache/gutentags'
+let g:gutentags_cache_dir = $HOME.'/.cache/gutentags'
 
 " let g:gutentags_ctags_tagfile
 " let g:gutentags_project_root = ['tags'] 
