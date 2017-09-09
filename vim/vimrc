@@ -120,16 +120,19 @@ set thesaurus=~/.vim/config/mthesaur.txt
 " set formatprg=fmt\ --width=74\ -u
 " let $PARINIT='rTbgqR B=.,?_A_a Q=_s>|'
 
-function! SetFormatPrg()
-    if &textwidth > 0
-        let &formatprg='par '.&textwidth.'j'
-    endif
-endfunction
-augroup rc_formatprg
-    autocmd!
-    autocmd OptionSet textwidth call SetFormatPrg()
-augroup END
-call SetFormatPrg()
+" allow formatprg to justify text to the current textwidth
+if executable('par')
+    function! SetFormatPrg()
+        if &textwidth > 0 && (&formatprg =~ 'par' || &formatprg is '')
+            let &formatprg='par rTbgqR B=.,\?_A_a Q=_s\>\| '.&textwidth.'j'
+        endif
+    endfunction
+    augroup rc_formatprg
+        autocmd!
+        autocmd OptionSet textwidth call SetFormatPrg()
+    augroup END
+    call SetFormatPrg()
+endif
 
 " j: remove comments when joining
 " l: don't break long lines in insert mode
@@ -149,8 +152,8 @@ let &showbreak = " ❯❯❯ "   " ∴  ⮱  → ↳ 🡆 ❯
 
 set laststatus=2
 set scrolloff=2
-set wildmenu
-set wildmode=longest:full,full
+set wildmenu wildignorecase
+set wildmode=longest:full,full   " list:longest,full
 set suffixes+=.pdf,.synctex
 set isfname-==
 
@@ -263,6 +266,7 @@ let g:rc_no_colors = 0
 " vim global opts
 let g:vimsyn_embed = 0  " cf vim/vim/issues/668
 let g:tex_flavor='latex'
+let g:tex_comment_nospell=1
 
 " directory for the rest of the configuration
 let g:config_home = expand('~/.vim/config')
@@ -357,12 +361,15 @@ function! s:end_bufenter_hook()
     " file has determinable shiftwidth
     if l:sw > 0
         let &shiftwidth = l:sw
+        let &tabstop = l:sw
+        if !&et | set et | endif
     endif
 
     " file uses a mix of tabs and spaces
-    if index(l:flags, 'space') > -1 && index(l:flags, 'tab') > -1
-        set tabstop=8
-    endif
+    " xxx this is more annoying than useful
+    " if index(l:flags, 'space') > -1 && index(l:flags, 'tab') > -1
+    "     set tabstop=8
+    " endif
 endfunction
 
 function! s:install_end_bufenter_hook(enabled)
@@ -759,7 +766,10 @@ let g:airline_symbols.maxlinenr = ''
 let g:airline#extensions#whitespace#enabled = 0
 let g:airline#extensions#bufferline#enabled = 0
 let g:airline#extensions#syntastic#enabled = 1
-let g:airline#extensions#tagbar#enabled = 1
+" let g:airline#extensions#tagbar#enabled = 1
+let g:airline#extensions#tagbar#enabled = 0
+" let g:airline#extensions#branch#enabled = 0
+
 let g:airline#parts#ffenc#skip_expected_string='utf-8[unix]'
 
 let g:airline#extensions#hunks#enabled = 0
@@ -774,6 +784,7 @@ let g:airline#extensions#vimtex#enabled = 0
 let g:airline#extensions#vimtex#left = "("
 let g:airline#extensions#vimtex#right = ")"
 
+ " let g:airline_extensions = []
 
 let g:airline_section_error = ''  " temporary, to hide red arrow
 let g:airline_section_warning = ''
@@ -817,7 +828,16 @@ call airline#parts#define_minwidth('foo', 50)
 
 " let g:airline_section_z = airline#section#create(['windowswap', '%3p%% ', 'linenr', 'maxlinenr', ' :%3v'])
 
-call airline#parts#define_function('gutentags', 'gutentags#statusline')
+
+
+function! GutentagsStatus()
+    let l:sl = gutentags#statusline('🔖')
+    if strlen(l:sl)
+        return substitute(l:sl, '\[ctags]', '', '').' '
+    endif
+    return ''
+endfunction
+call airline#parts#define_function('gutentags', 'GutentagsStatus')
 
 " XXX
 let g:airline#extensions#windowswap#enabled = 1
@@ -879,6 +899,15 @@ let g:gutentags_cache_dir = '/home/andy/.cache/gutentags'
 " let g:gutentags_add_default_project_roots = 0
 "}}}2
 
+" minimap {{{2
+
+let g:minimap_show='<leader>as'
+let g:minimap_update='<leader>au'
+let g:minimap_close='<leader>ac'
+let g:minimap_toggle='<leader>at'
+
+" }}}2
+
 " netrw/vim-vinegar {{{2
 let g:netrw_list_hide = '\(^\|\s\s\)\zs\.\S\+'
 let g:netrw_altv = 1
@@ -922,12 +951,10 @@ cnoreabbrev <expr> help   getcmdtype()==':'
 
 "}}}2
 
-
 let g:Tex_Leader2='<C-\>'
 
 let g:Tex_AutoFolding=0
 let g:Tex_ShowErrorContext=0
-let g:tex_comment_nospell=1
 let g:Imap_FreezeImap=1
 let g:Tex_EnvironmentMaps=0
 let g:Tex_EnvironmentMenus=0
@@ -941,7 +968,7 @@ function! SynctexInverseSearch(line, file)
     " let bufnr = bufnr('^'.a:file.'$')
     " exe bufwinnr.'winc w'
 endfunction
-autocmd FileType tex let $VIM_SERVERNAME=v:servername
+" autocmd FileType tex let $VIM_SERVERNAME=v:servername
 
 let g:Tex_ViewRuleComplete_pdf='zathura -x '
     \ . '"vim --servername {v:servername} --remote +\%{line} \%{input}" '
@@ -1525,9 +1552,11 @@ endfunction
 " ────────────────────────────────────────────────────────────────────────
 " commands {{{1
 
+" holding shift too long
+command! Q quit
+
 " source our .vimrc
 command! ReloadVimrc source $MYVIMRC | redraw | echo $MYVIMRC.' reloaded'
-
 
 " check for a shebang line and set up to execute
 function! SetShebangRun()
@@ -1553,7 +1582,7 @@ function! s:FigPickerMode() range
     execute 'silent keepalt vertical 20 new __Figpicker__'
     let g:figletPickerWindow = winnr()
     setl nonu cursorline nospell 
-    setl noreadonly
+    setl noreadonly       " or bufhidden=delete?
     setl buftype=nofile bufhidden=hide noswapfile nobuflisted 
     setl nolist nowrap winfixwidth textwidth=0 
     execute ':.!figlist -d ' . g:figletFontDir . '| tail -n +3'
@@ -2035,12 +2064,15 @@ function! s:rc_pre_filetype_tex_maps()
     " delimiter modifier toggling e.g., \big( -> \Big(
     nmap <silent><buffer> cd <plug>(vimtex-delim-toggle-modifier)
     nmap <silent><buffer> cD <plug>(vimtex-delim-toggle-modifier-reverse)
-    xmap <silent><buffer> Sd <plug>(vimtex-delim-toggle-modifier)
-    xmap <silent><buffer> SD <plug>(vimtex-delim-toggle-modifier-reverse)
-    nmap <silent><buffer> cse* <plug>(vimtex-env-toggle-star)
-    nmap <silent><buffer> csc* <plug>(vimtex-cmd-toggle-star)
+    xmap <silent><buffer> <c-bslash>d <plug>(vimtex-delim-toggle-modifier)
+    xmap <silent><buffer> <c-bslash>D <plug>(vimtex-delim-toggle-modifier-reverse)
+    nmap <silent><buffer> csE <plug>(vimtex-env-toggle-star)
+    nmap <silent><buffer> csC <plug>(vimtex-cmd-toggle-star)
     " xxx find alternative maps.. cd, cD, co, cO, csd+/-?
 
+    " analogous to cd/cD but for \norm[\big]{}
+    nmap <silent><buffer> co <plug>(tex-opt-incr)
+    nmap <silent><buffer> cO <plug>(tex-opt-decr)
 endfunction
 function! s:rc_post_filetype_tex_maps()
     " without this, ``a becomes `\alpha
@@ -2164,13 +2196,17 @@ vnoremap <silent> gy :FIGlet<cr>
 
 " show syntax under cursor
 nnoremap gb :call SyntaxAttr()<cr>
-nnoremap gB :echo "hi<"
-    \ . synIDattr(synID(line("."),col("."),1),"name") . '> trans<'
-    \ . synIDattr(synID(line("."),col("."),0),"name") . "> lo<"
-    \ . synIDattr(synIDtrans(synID(line("."),col("."),1)),"name") . ">"<CR>
-nmap <silent> g<c-b> :<c-u>HLTX!<cr>
-" this one doesn't seem to work
-nmap <sid>(hlt) <plug>HiLinkTrace
+function! s:hi_show()
+    let [l:l, l:c] = [line('.'), col('.')]
+    echo 'hi<' . synIDattr(synID(l:l,l:c,1),'name')
+        \ . '> trans<' . synIDattr(synID(l:l,l:c,0),'name')
+        \ . '> lo<' . synIDattr(synIDtrans(synID(l:l,l:c,1)),'name') . '>'
+endfunction
+nnoremap gB :call <sid>hi_show()<cr>
+
+" nmap <silent> g<c-b> :<c-u>HLTX!<cr>
+" " this one doesn't seem to work
+" nmap <sid>(hlt) <plug>HiLinkTrace
 
 " free keys xxx
 " gb show syntax
@@ -2256,6 +2292,7 @@ nnoremap <silent> <leader>]   :set opfunc=SlingOper<cr>g@
 nnoremap <silent> <leader>]]  :silent SlimuxREPLSendLine<cr>
 vnoremap <silent> <leader>]   :SlimuxREPLSendSelection<cr>
 
+" xxx move, make <buffer>
 autocmd FileType matlab nnoremap <silent> 
     \ <leader>\ :<c-u>w<cr>:execute ":SlimuxShellRun " . expand('%:r')<cr>
 
@@ -2405,8 +2442,6 @@ vnoremap g<leader>; g<c-a>
 
 nnoremap <silent> <plug>(tex-opt-incr) :<c-u>call TexOptionIncrement(1)<cr>
 nnoremap <silent> <plug>(tex-opt-decr) :<c-u>call TexOptionIncrement(-1)<cr>
-nmap <silent> co <plug>(tex-opt-incr)
-nmap <silent> cO <plug>(tex-opt-decr)
 
 " nnoremap <c-k> <c-a>
 " nnoremap <c-j> <c-x>
@@ -2540,7 +2575,8 @@ endfunction
 " return l:pattern
 " endfunction
 
-nnoremap <silent> <leader>* :call SearchWord() \| set hlsearch<cr>
+nnoremap <silent> <leader>* :call SearchWord() \| set hlsearch \| let v:searchforward = 0<cr>
+nnoremap <silent> <leader># :call SearchWord() \| set hlsearch \| let v:searchforward = 1<cr>
 
 " change cursor word and load search to quickly change occurrences
 " dot can be used to repeat the search+change combo
@@ -2617,22 +2653,29 @@ endif
 " this has the nice properties of mostly preserving order,
 " but does not swap out to master correctly
 function! Relayout()
+   " in order, bring each window to bottom
    let l:nr = winnr()
    let l:nrlast = winnr('#')
    windo wincmd J
    exe l:nrlast.'wincmd w'
    exe l:nr.'wincmd w'
-   if &columns > (&textwidth)+20
+
+   " if there are enough columns, bring master to left
+   " otherwise, bring master to bottom and maximize
+   if &columns > (&textwidth)+50
       wincmd H
+      exe (2+&numberwidth+&textwidth).'wincmd|'
    else
       wincmd K
       wincmd _
    endif
 endfunction
-" nnoremap <silent> <c-w><space> :call Relayout()<cr>
+nnoremap <silent> <c-w><space> :call Relayout()<cr>
 
-command! -nargs=* LayoutH call window#layout('ball', 'H', <args>)
-nnoremap <c-w><space> :<c-u>LayoutH v:count<cr>
+
+" command! -nargs=* LayoutH call window#layout('ball', 'H', <args>)
+" nnoremap <c-w><space> :<c-u>LayoutH v:count<cr>
+
 nnoremap <C-w>gl :<C-U>call window#join('rightbelow vsplit', v:count) <BAR>normal! 100zh<CR>
 nnoremap <C-w>gh :<C-U>call window#join('leftabove vsplit', v:count)  <BAR>normal! 100zh<CR>
 nnoremap <C-w>gj :<C-U>call window#join('belowright split', v:count)  <BAR>normal! 100zh<CR>
@@ -3026,6 +3069,9 @@ function! FixIndents()
 endfunction
 
 function! s:init()
+    " make servername available to (all) child processes
+    let $VIM_SERVERNAME=v:servername
+
     call SiteEnter()
 
     " add a hook to securemodelines
