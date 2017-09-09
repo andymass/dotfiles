@@ -286,6 +286,9 @@ endif
 
 exe 'source' g:site_config
 
+" load color handling module
+exe 'source' g:config_home.'/colors.vim'
+
 " }}}1
 
 " ────────────────────────────────────────────────────────────────────────
@@ -3072,6 +3075,7 @@ function! s:init()
     " make servername available to (all) child processes
     let $VIM_SERVERNAME=v:servername
 
+    call ColorsEnter()
     call SiteEnter()
 
     " add a hook to securemodelines
