@@ -268,10 +268,18 @@ augroup END
 let g:within_tmux = ($TMUX != '')
 
 " load site-specific configs
-let g:site_config = g:config_home.'/site.'.hostname().'.vim'
-if !filereadable(g:site_config)
-    let g:site_config = g:config_home.'/site.default.vim'
-endif
+function! s:get_site_config()
+    let l:site_files = glob(g:config_home.'/site.*.vim', 0, 1)
+    let l:host = g:config_home.'/site.'.hostname().'.vim'
+    for l:f in l:site_files
+        if l:host =~ glob2regpat(l:f) && filereadable(l:f)
+            return l:f
+        endif
+    endfor
+    return g:config_home.'/site.default.vim'
+endfunction
+
+let g:site_config = s:get_site_config()
 
 exe 'source' g:site_config
 
