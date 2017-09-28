@@ -91,6 +91,8 @@
 "   - tags gutentags vs highlighting (easytags/taghighlight)
 "   - vis.vim?
 
+" see doc/andy.txt
+
 " }}}1
 
 " the basics {{{1
@@ -170,6 +172,9 @@ set nosol
 " disable intro
 set shortmess+=I
 
+" more sane [( ]) maps (xxx is it?)
+set cpoptions+=M%
+
 " under ssh, disable clipboard to make things faster
 if $SSH_CLIENT != ''
     set clipboard=exclude:.*
@@ -234,7 +239,7 @@ if executable('ag')
 
     " command! -nargs=+ -complete=file -bar Ag silent! grep! <args>
     "     \ | redraw!
-    
+
     command! -nargs=+ -complete=file -bar Ag call s:ag_do(<q-args>)
 
 endif
@@ -496,6 +501,12 @@ xmap <leader>n <Plug>NrrwrgnDo
 nmap <silent> <leader>n <Plug>NrrwrgnDo
 
 " }}} 2
+
+" vim-lotr {{{2
+
+nmap <sid>(lotr-toggle) <plug>LOTRToggle
+
+" }}}2
 
 " scratch {{{2
 
@@ -854,6 +865,7 @@ let g:airline_mode_map = {
       \ 'V'  : 'V-LINE',
       \ 'c'  : ':',
       \ '' : 'V-BLOCK',
+      \ 't'  : '$',
       \ }
 
 let g:airline_left_sep = ''
@@ -1053,6 +1065,8 @@ let g:no_viewdoc_maps = 1
 "     \ && getcmdline()=='h'     ? 'ViewDocHelp!' : 'h'
 " cnoreabbrev <expr> help   getcmdtype()==':'
 "     \ && getcmdline()=='help'  ? 'ViewDocHelp!' : 'help'
+
+" cnoremap <expr> <esc> stridx('/?', getcmdtype()) < 0 ? '<c-c>' : 'b'
 
 " function! s:Help(args)
 "         \ :<C-U>exe 'topleft help '.scriptease#helptopic()<CR>
@@ -1342,8 +1356,7 @@ function! FixSwTs()
 endfunction
 
 
-" shiftwidth tabstop softtabstop smarttab expandtab
-" preserveindent?
+" :set shiftwidth? tabstop? softtabstop? smarttab? expandtab? preserveindent? copyindent?
 
 " au BufRead * echo 'BufRead '.&shiftwidth | sleep 1
 " au BufEnter * call FixSwTs()
@@ -1809,12 +1822,12 @@ endfunction
 
 let s:default_tw = &g:textwidth ? &g:textwidth : 74
 function! s:ExpandTextWidth()
-    let l:tl = winsaveview().topline
-    let l:longest = max(map(getline(l:tl, l:tl+winheight(0)-1), 
+    let l:longest = max(map(getline(line('w0'), line('w$')), 
         \ 'strdisplaywidth(v:val)'))
     let &l:textwidth = (&l:textwidth == l:longest)
         \ ? s:default_tw
         \ : max([ s:default_tw, l:longest ])
+    echo 'set textwidth='.&l:textwidth
 endfunction
 
 " XXX re-enable
@@ -2327,6 +2340,10 @@ cnoremap <a-b> <s-left>
 set <a-f>=f
 cnoremap <a-f> <s-right>
 
+" put register with newlines changed to spaces
+" useful for example, to paste from clipboard ^R_+
+cnoremap <silent> <c-r>_ <c-r>=join(getreg(nr2char(getchar()), 0, 1), ' ')<cr>
+
 " vdebug
 nnoremap <Leader>x :<C-U>VdebugEval 
 
@@ -2542,9 +2559,29 @@ nnoremap <leader>d :YcmCompleter GoTo<CR>
 " XXX make this work in visual and backwards
 " (v:searchforward = 0)
 function! SearchWord()
-    let @/ = '\<'.escape(expand('<cword>'), 
-        \ &magic ? "/.*~[^$\\" : "/^$\\").'\>'
+    let l:word = escape(expand('<cword>'), &magic ? "/.*~[^$\\" : "/^$\\")
+    let @/ = '\<'.l:word.'\>'
 endfunction
+
+nnoremap <silent> <leader>3 :<c-u>call SearchWord()
+            \ \| set hlsearch \| let v:searchforward = 0<cr>
+nnoremap <silent> <leader>8 :<c-u>call SearchWord()
+            \ \| set hlsearch \| let v:searchforward = 1<cr>
+
+function! SearchV()
+    let l:save_z = [getreg('z'), getregtype('z')]
+    normal! gv"zy
+    let l:word = escape(@z, &magic ? "/.*~[^$\\" : "/^$\\")
+    let @/ = substitute(l:word, '\n', '\\n', 'g')
+    if l:save_z[1] isnot ''
+        call setreg('z', l:save_z[0], l:save_z[1])
+    endif
+endfunction
+
+xnoremap <silent> <leader>3 :<c-u>call SearchV()
+            \ \| set hlsearch \| let v:searchforward = 0<cr>
+xnoremap <silent> <leader>8 :<c-u>call SearchV()
+            \ \| set hlsearch \| let v:searchforward = 1<cr>
 
 " shellescape(foo, 1)
 " additional = /
@@ -2559,9 +2596,9 @@ endfunction
 " endif
 " return l:pattern
 " endfunction
+" nnoremap <silent><expr> <leader>3 SearchWord2('?')
+" nnoremap <silent><expr> <leader>8 SearchWord2('/')
 
-nnoremap <silent> <leader>* :call SearchWord() \| set hlsearch \| let v:searchforward = 0<cr>
-nnoremap <silent> <leader># :call SearchWord() \| set hlsearch \| let v:searchforward = 1<cr>
 
 " change cursor word and load search to quickly change occurrences
 " dot can be used to repeat the search+change combo
@@ -2649,7 +2686,9 @@ function! Relayout()
    " otherwise, bring master to bottom and maximize
    if &columns > (&textwidth)+50
       wincmd H
-      exe (2+&numberwidth+&textwidth).'wincmd|'
+      let l:w = &textwidth
+        \ + (&number ? (max([strlen(line('$'))+1, &numberwidth])) : 0)
+      exe l:w.'wincmd|'
    else
       wincmd K
       wincmd _
@@ -2661,11 +2700,11 @@ nnoremap <silent> <c-w><space> :call Relayout()<cr>
 " command! -nargs=* LayoutH call window#layout('ball', 'H', <args>)
 " nnoremap <c-w><space> :<c-u>LayoutH v:count<cr>
 
-nnoremap <C-w>gl :<C-U>call window#join('rightbelow vsplit', v:count) <BAR>normal! 100zh<CR>
-nnoremap <C-w>gh :<C-U>call window#join('leftabove vsplit', v:count)  <BAR>normal! 100zh<CR>
-nnoremap <C-w>gj :<C-U>call window#join('belowright split', v:count)  <BAR>normal! 100zh<CR>
-nnoremap <C-w>gk :<C-U>call window#join('aboveleft split', v:count)   <BAR>normal! 100zh<CR>
-nnoremap <C-w>e :<C-U>call window#exchange(v:count)<cr>
+nnoremap <c-w>gl :<c-u>call window#join('rightbelow vsplit', v:count)<cr>zs
+nnoremap <c-w>gh :<c-u>call window#join('leftabove vsplit', v:count)<cr>zs
+nnoremap <c-w>gj :<c-u>call window#join('belowright split', v:count)<cr>zs
+nnoremap <c-w>gk :<c-u>call window#join('aboveleft split', v:count)<cr>zs
+nnoremap <c-w>e :<c-u>call window#exchange(v:count)<cr>
 
 " sanity
 " stack
@@ -2820,7 +2859,7 @@ function! s:Train(c)
     echo 'Did you really mean to type '.a:c.'?'
     call Beep() | return a:c
 endfunction
-nnoremap <silent><expr> q <sid>Train('q')
+" nnoremap <silent><expr> q <sid>Train('q')
 
 " toggle textwidth/column
 nnoremap <silent> <leader>v :<c-u>call <sid>ToggleTextWidth()<cr>
@@ -2950,6 +2989,20 @@ function! s:vcol_updown(back)
 endfunction
 xnoremap <expr> <c-j> <sid>vcol_updown(0)
 xnoremap <expr> <c-k> <sid>vcol_updown(1)
+
+" search on screen only
+function! s:screen_search(op)
+    let l:tl = winsaveview().topline
+    return a:op . '\%>'.(l:tl).'l'
+              \ . '\%<'.(l:tl+winheight(0)-1).'l'
+endfunction
+" function! s:screen_search(op)
+"     let l:tl = winsaveview().topline
+"     return ':'.(l:tl).','.(l:tl+winheight(0)-1).'/'
+" endfunction
+nnoremap <expr> z/ <sid>screen_search('/')
+
+" nnoremap z/ /<c-r>-<cr>
 
 " }}}1
 
