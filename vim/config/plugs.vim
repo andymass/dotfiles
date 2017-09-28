@@ -66,6 +66,8 @@ Plug 'chrisbra/NrrwRgn'
 " Plug 'tomtom/quickfixsigns_vim'
 Plug 'vim-utils/vim-vertical-move'
 Plug 'dahu/vim-lotr'
+" Plug 'terryma/vim-expand-region'
+Plug 'Julian/vim-textobj-brace'
 
 " characters and unicode
 Plug 'junegunn/vim-emoji'
@@ -150,5 +152,7 @@ function! HasPlugin(plug)
 endfunction
 
 " matchit standard vim macro
-runtime macros/matchit.vim
+" runtime macros/matchit.vim
+" packadd! matchit
+" runtime config/matchit.vim
 
