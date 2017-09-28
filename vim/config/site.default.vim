@@ -11,7 +11,6 @@ endfunction
 function! SiteSetupPlugs()
     Plug 'andymass/vimtex'
     Plug 'andymass/vim-matlab'
-    Plug 'Valloric/YouCompleteMe'
     Plug 'chriskempson/base16-vim'
 endfunction
 
