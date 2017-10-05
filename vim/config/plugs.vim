@@ -40,6 +40,7 @@ Plug 'ctrlpvim/ctrlp.vim'
 Plug 'ivalkeen/vim-ctrlp-tjump'
 Plug 'DeaR/ctrlp-location-list'
 Plug 'christoomey/ctrlp-generic'
+" Plug 'ompugao/ctrlp-locate'
 
 " conveniences
 Plug 'majutsushi/tagbar'
@@ -81,6 +82,7 @@ Plug 'kana/vim-operator-user'
 Plug 'wesQ3/vim-windowswap'
 Plug 'ddrscott/vim-window'
 Plug 'Soares/butane.vim'
+" Plug 't9md/vim-choosewin'
 
 " terminal/tmux integration
 " these plugins allow vim to receive focus events in terminal
@@ -90,7 +92,7 @@ Plug 'Soares/butane.vim'
 " Plug 'tmux-plugins/vim-tmux-focus-events'
 
 " syntax and coding 
-Plug 'scrooloose/syntastic'
+" Plug 'scrooloose/syntastic'
 " Plug 'w0rp/ale'
 Plug 'vim-scripts/SyntaxAttr.vim'
 Plug 'SirVer/ultisnips'
@@ -133,6 +135,7 @@ Plug 'jsit/disco.vim'
 " Plug 'chriskempson/base16-vim' [*]
 " Plug 'xolox/vim-misc' | Plug 'xolox/vim-colorscheme-switcher'
 Plug 'jnurmine/Zenburn'
+Plug 'fneu/breezy'
 
 " experiment
 " Plug 'ryanoasis/vim-devicons'

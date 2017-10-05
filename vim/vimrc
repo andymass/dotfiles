@@ -72,6 +72,11 @@
 " <f20> to <f37>
 " this is really k1-k9,k;,FA-FZ
 
+" free win keys: ^Wa ^We ^Wm ^Wu ^Wy ^W<space> ^W<cr> ^W' ^W"
+" ^We   (better) exchange
+"
+"
+
 " Todo
 "   - ripgrep
 "   - syntastic -> ale
@@ -139,6 +144,8 @@ endif
 " j: remove comments when joining
 " l: don't break long lines in insert mode
 set formatoptions+=jl
+
+set pumheight=11
 
 " changes the behavior of <cr> in two ways:
 "   - <cr> now accepts an autocomplete
@@ -573,6 +580,11 @@ let g:vimtex_view_forward_search_on_start = 0
 let g:vimtex_imaps_leader = '`'
 let g:vimtex_indent_ignored_envs = ['document', 'aligned']
 
+let g:vimtex_toc_fold = 1
+
+" xxx xxx
+let g:tex_indent_items=0
+
 " cleanup vimtex viewer windows
 " function VimtexCleanViewers()
 "     if !executable('xdotool') | return | endif
@@ -944,7 +956,12 @@ endfunction
 " call airline#add_inactive_statusline_func('WindowNumber')
 
 function! ThisWay()
-    return '✦'.winnr().'.'.bufnr("%").' '
+    let l:mark = GetWinnrMark()
+    if strlen(l:mark)
+        let l:mark = '('.l:mark.')'
+    endif
+    return (winnr('#') == winnr() ? '✧' : '✦')
+            \ . winnr().'.'.bufnr("%").l:mark.' '
 endfunction
 call airline#parts#define_function('thisway', 'ThisWay')
 
@@ -974,8 +991,10 @@ let g:airline#extensions#windowswap#enabled = 1
 let g:airline#extensions#windowswap#indicator_text = '👌' " 🍔 WS'
 
 au User AirlineAfterInit let g:airline_section_z
-    \ = airline#section#create( ['windowswap', 'gutentags', 'thisway', 
+    \ = airline#section#create( ['windowswap', 'gutentagsb', 'thisway', 
     \ 'linenr', 'maxlinenr', ' :%3v'] )
+
+" au User GutentagsUpdated call airline#update_statusline()
 
 " let g:airline_section_z = airline#section#create(
 "     \ ['windowswap', 'gutentags', 'thisway', 
@@ -1892,8 +1911,11 @@ function! Beep()
 endfunction
 
 " like :!, but operate on visual selection instead of lines
+" todo: make this work like exe ...
+" todo: substitute, search.. cf vim-scripts/vis
 function! Vexecute(bang, args) range
-    if empty(a:args) | return | endif
+    if empty(a:args) || visualmode() != "\<c-v>" | return | endif
+
     let l:bang = a:bang ? 1 : 0 
     let l:args = a:args
 
@@ -1913,9 +1935,34 @@ function! Vexecute(bang, args) range
     let @z = l:old_z
 endfunction
 command! -bang -range=0 -nargs=* -complete=shellcmd V call Vexecute(<bang>0, <q-args>)
+" complete={command, expression}
 
 " in visual block mode, filter defaults to Vexecute 
 xnoremap <expr> ! mode() == "\<c-v>" ? ':V!' : '!'
+
+function! Vexe2(bang, args) range
+    if empty(a:args) || visualmode() != "\<c-v>" | return | endif
+    let l:args = (a:bang ? '!' : '') . a:args
+
+    sil normal! gv"zy
+    let l:ctx = getreg('z', 1, 1)
+    let l:pad = min([col("'<'"), col("'>")]) - 1
+    for l:i in range(line("'>") - line("'<") + 1)
+        let l:linenr = line("'<") + l:i
+        call setline(l:linenr,
+            \ printf('%'.l:pad.'s%s', '', l:ctx[l:i]))
+    endfor
+
+    " let l:savereg = [getreg(), getregtype()]
+    " let l:prev = getreg('"')
+    " sil normal! gvVp
+    " exe "'<,'>" . l:args
+    " call setreg('"', l:prev, visualmode())
+    " sil normal! gvp
+    " normal! gv
+    " call setreg('"', l:savereg[0], l:savereg[1])
+endfunction
+command! -bang -range=0 -nargs=* -complete=shellcmd S call Vexe2(<bang>0, <q-args>)
 
 " tex increment option ('' = \relax)
 let g:tex_big_list = [ '', '\big', '\Big', '\bigg', '\Bigg' ]
@@ -2087,11 +2134,11 @@ augroup rc_filetype_tex
     autocmd FileType tex call textobj#user#plugin('latex', {
         \  'quote': {
         \     'pattern': ['`', "'"],
-        \     'select-a': "a'", 'select-i': "i'",
+        \     'select-a': "<buffer> a'", 'select-i': "<buffer> i'",
         \   },
         \  'double-quote': {
         \     'pattern': ['``', "''"],
-        \     'select-a': 'a"', 'select-i': 'i"',
+        \     'select-a': '<buffer> a"', 'select-i': '<buffer> i"',
         \   },
         \ })
     autocmd FileType tex setlocal iskeyword-=\
@@ -2116,6 +2163,9 @@ augroup rc_filetype_matlab
         \ path+=/opt/MATLAB/R2017a/toolbox/matlab/**
         \ commentstring=%\ %s
 augroup END
+
+" python
+let g:python_highlight_all = 1
 
 " quickfix
 function! QuickFixFold()
@@ -2754,8 +2804,10 @@ set winminheight=1 winminwidth=0
 let g:windowswap_map_keys = 0
 " XXX better keymaps?
 "     why doesn't airline work with this?
-nnoremap <c-w>m :call WindowSwap#MarkWindowSwap()<CR>
-nnoremap <c-w>' :call WindowSwap#DoWindowSwap()<CR>
+"   XXX window swap may behave better than window#exchange (vim-window)
+nnoremap <c-w>u :call WindowSwap#EasyWindowSwap()<cr>
+" nnoremap <c-w>m :call WindowSwap#MarkWindowSwap()<CR>
+" nnoremap <c-w>' :call WindowSwap#DoWindowSwap()<CR>
 
 " see airline extension for windowing
 
@@ -3019,7 +3071,8 @@ nnoremap <expr> z/ <sid>screen_search('/')
 " fix bug(?) in vim/Konsole
 " Konsole does not support this particular escape sequence
 " if g:rc_term_konsole
-" set t_SH=
+" fix bug in :terminal printing 'q'
+set t_SH=
 
 if &term =~ '^konsole'
     let &t_8f = "\<Esc>[38;2;%lu;%lu;%lum"

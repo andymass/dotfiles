@@ -10,7 +10,7 @@ function! SiteSetupAppearance()
 endfunction
 
 function! SiteSetupPlugs()
-
+    " Plug 'scrooloose/syntastic''
 endfunction
 
 " settings overrides
