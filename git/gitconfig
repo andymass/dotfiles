@@ -44,42 +44,8 @@
     lg      = prettylog 1
     lgg     = prettylog 2
     lggg    = prettylog 3
-    shrekt  = !cat ~/script/shrekfile
+    shrekt  = !cat $SCRIPTDIR/shrekfile
 
 [include]
     path = ~/.gitconfig.local
-
-    ; lg = log --graph --abbrev-commit --decorate --format=format:'%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(dim white)- %an%C(reset)%C(auto)%d%C(reset)' --all
-    ; lgg = log --graph --abbrev-commit --decorate --format=format:'%C(bold blue)%h%C(reset) - %C(bold cyan)%aD%C(reset) %C(bold green)(%ar)%C(reset)%C(auto)%d%C(reset)%n''          %C(white)%s%C(reset) %C(dim white)- %an%C(reset)' --all
-    ; lggg = log --graph --abbrev-commit --decorate --format=format:'%C(bold blue)%h%C(reset) - %C(bold cyan)%aD%C(reset) %C(bold green)(%ar)%C(reset) %C(bold cyan)(committed: %cD)%C(reset) %C(auto)%d%C(reset)%n''          %C(white)%s%C(reset)%n''          %C(dim white)- %an <%ae> %C(reset) %C(dim white)(committer: %cn <%ce>)%C(reset)' --all
-    ; shrekt=!curl -s http://www.medini.org/keshet/prog3/l8/shrek.html | sed '/</d'
-; gud=!man -k . | shuf -n1 | sed 's/^\\([^(]\\+\\)(\\(.\\+\\)).*$/\\2 \\1/' | xargs man
-; [pager]
-;     diff = diff-so-fancy | 
-;     less --tabs=4 -RFX --pattern '^(Date|added|deleted|modified): '
-; [color]
-;     ui = always
-; [color "diff"]
-;     meta = yellow bold
-;     commit = green bold
-;     frag = magenta bold
-;     old = red bold
-;     new = green bold
-;     whitespace = red reverse
-; [color "diff-highlight"]
-;     oldNormal = red bold
-;     oldHighlight = "red bold 52"
-;     newNormal = "green bold"
-;     newHighlight = "green bold 22"
-; [color "branch"]
-;     current = yellow reverse
-;     local = yellow
-;     remote = green
-; [color "status"]
-;     added = yellow
-;     changed = green
-;     untracked = cyan
-    ; diff = diff
-    ; diff = diff --color --color-words --abbrev
-    ; pager = less -XRF --tabs=4
 
