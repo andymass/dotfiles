@@ -1,0 +1,36 @@
+#!/usr/bin/perl
+
+use warnings;
+use strict;
+
+my $type = shift;
+
+my %formats = (
+    1 => '%C(bold blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) '
+        . '%C(white)%s%C(reset) %C(dim white)- %an%C(reset)'
+        . '%C(auto)%d%C(reset)'
+,
+    2 => '%C(bold blue)%h%C(reset) - %C(bold cyan)%aD%C(reset) '
+        . '%C(bold green)(%ar)%C(reset)%C(auto)%d%C(reset)%n\'\'          '
+        . '%C(white)%s%C(reset) %C(dim white)- %an%C(reset)'
+,
+    3 => '%C(bold blue)%h%C(reset) - %C(bold cyan)%aD%C(reset) '
+        . '%C(bold green)(%ar)%C(reset) %C(bold cyan)(committed: %cD)'
+        . '%C(reset) %C(auto)%d%C(reset)%n\'\'          '
+        . '%C(white)%s%C(reset)%n\'\'          '
+        . '%C(dim white)- %an <%ae> %C(reset) '
+        . '%C(dim white)(committer: %cn <%ce>)%C(reset)'
+);
+
+if (exists $formats{$type}) {
+
+    my $cmd = 'git log --graph --abbrev-commit --decorate '
+        . "--format=format:'$formats{$type}' --all";
+    system($cmd);
+
+} else {
+
+    die `basename "$0"`.": invalid format";
+
+}
+
