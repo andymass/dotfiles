@@ -956,9 +956,13 @@ endfunction
 " call airline#add_inactive_statusline_func('WindowNumber')
 
 function! ThisWay()
-    let l:mark = GetWinnrMark()
-    if strlen(l:mark)
-        let l:mark = '('.l:mark.')'
+    if exists('*GetWinnrMark')
+        let l:mark = GetWinnrMark()
+        if strlen(l:mark)
+            let l:mark = '('.l:mark.')'
+        endif
+    else
+        let l:mark = ''
     endif
     return (winnr('#') == winnr() ? '✧' : '✦')
             \ . winnr().'.'.bufnr("%").l:mark.' '
