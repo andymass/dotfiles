@@ -11,9 +11,14 @@
     type = cat-file -t
     dump = cat-file -p
     diffname = diff --name-only
+    diffnp = !git --no-pager diff
     dlc = diff --cached HEAD^
     last = show -s HEAD^{commit}
     stat = diff --stat-width=65
+    new = !git fetch && git status
+    plum = pull upstream master
+    dr = diff --relative
+    ds = diff --staged
 
 [diff]
     algorithm = patience
