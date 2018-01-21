@@ -191,7 +191,11 @@ function! s:ColorFix()
     if g:colors_name == 'palenight'
         hi MatchParen cterm=italic gui=italic
         hi FoldColumn ctermfg=238 guifg=#4B5263
-        hi Spellbad guifg=NONE
+        hi SpellBad   guifg=NONE guibg=#3d293d gui=NONE cterm=NONE
+        hi SpellCap   guifg=NONE guibg=#3d3629 gui=NONE cterm=NONE
+        hi SpellRare  guifg=NONE guibg=#293d29 gui=NONE cterm=NONE
+        hi SpellLocal guifg=NONE guibg=#293d3d gui=NONE cterm=NONE
+
         let g:palenight_terminal_italics = 1
         let g:airline_theme = 'onedark'
     endif

@@ -109,6 +109,7 @@ set cc=+1
 set expandtab
 set bs=indent
 set ffs=unix,dos
+set display=truncate
 
 set noswapfile
 set virtualedit=block
@@ -119,7 +120,7 @@ set mouse=a ttymouse=xterm2
 set nu
 if !&hlsearch | set hlsearch | endif
 set spell spelllang=en_us
-set spellsuggest=best,5
+set spellsuggest=fast,5     " best,5
 set thesaurus=~/.vim/config/mthesaur.txt
 " set dictionary=/usr/share/dict/words
 
@@ -129,16 +130,22 @@ set thesaurus=~/.vim/config/mthesaur.txt
 
 " allow formatprg to justify text to the current textwidth
 if executable('par')
-    function! SetFormatPrg()
-        if &textwidth > 0 && (&formatprg =~ 'par' || &formatprg is '')
-            let &formatprg='par rTbgqR B=.,\?_A_a Q=_s\>\| '.&textwidth.'j'
+    function! SetFormatPrg(local)
+        let l:fp = a:local ? &l:formatprg : &g:formatprg
+        if &textwidth > 0 && (l:fp =~ '^par' || l:fp is '')
+            let l:fp='par rTbgqR B=.,\?_A_a Q=_s\>\| '.&textwidth.'j'
+        endif
+        if a:local
+            let &l:formatprg = l:fp
+        else
+            let &g:formatprg = l:fp
         endif
     endfunction
     augroup rc_formatprg
         autocmd!
-        autocmd OptionSet textwidth call SetFormatPrg()
+        autocmd OptionSet textwidth call SetFormatPrg(1)
     augroup END
-    call SetFormatPrg()
+    call SetFormatPrg(0)
 endif
 
 " j: remove comments when joining
@@ -153,11 +160,14 @@ set pumheight=11
 "   xxx conflicts with ycm
 " inoremap <expr> <CR> pumvisible() ? "\<C-y>" : "\<C-g>u\<CR>"
 
+" " use <cr> to accept completion
+" inoremap <expr> <cr> pumvisible() ? "\<c-y>" : "\<cr>"
+
 " set fillchars=vert:║,fold:- ─
 set fillchars=stl:\ ,stlnc:\ ,fold:\ ,vert:│
-set listchars=tab:»·,eol:↲,nbsp:␣,extends:…
-set listchars+=space:␣,precedes:<,extends:>,trail:·
-let &showbreak = " ❯❯❯ "   " ∴  ⮱  → ↳ 🡆 ❯
+set listchars=tab:»-,eol:↲,nbsp:_,extends:…
+set listchars+=space:_,precedes:<,extends:>,trail:·
+let &showbreak = " ❯❯❯ "   " ‗ ␣ ∴  ⮱  → ↳ 🡆 ❯
 
 set laststatus=2
 set scrolloff=2
@@ -174,7 +184,9 @@ set previewheight=18
 set nomodeline modelines=3
 set infercase
 
+set history=500
 set nosol
+" set showcmd
 
 " disable intro
 set shortmess+=I
@@ -199,7 +211,7 @@ if executable('ag')
         let [l:lnum, l:bufnr] = [ line('.'), bufnr('') ]
 
         " open or jump to quickfix window
-        copen
+        botright copen 8
 
         " get the corresponding quickfix line
         let l:qfln = map(getqflist(), 'v:val.bufnr == '.l:bufnr
@@ -220,6 +232,16 @@ if executable('ag')
         \ --column\ --follow\ -C0\ -W120
     set grepformat=%f:%l:%c:%m
 
+    " function Search(string) abort
+    "     let saved_shellpipe = &shellpipe
+    "     let &shellpipe = '>'
+    "     try
+    "         execute 'Ack!' shellescape(a:string, 1)
+    "     finally
+    "         let &shellpipe = saved_shellpipe
+    "     endtry
+    " endfunction
+
     function! s:ag_do(qargs)
         let l:t_te = &t_te
         let l:t_ti = &t_ti
@@ -235,6 +257,19 @@ if executable('ag')
 
         let &t_te = l:t_te
         let &t_ti = l:t_ti
+    endfunction
+
+    function! s:ag_do2(qargs)
+        if exists('b:gutentags_root')
+            exe 'AsyncRun! -cwd='.b:gutentags_root '-program=grep' a:qargs
+        else
+            exe 'AsyncRun! -program=grep' a:qargs
+        endif
+
+        " let l:ecmd = escape('Ag ' . a:qargs, '#%|')
+        " call s:ag_do_qf(':'.l:ecmd)
+        " call histadd('cmd', l:ecmd)
+
     endfunction
 
     " xxx don't switch to alternate terminal (t_ti/t_te)
@@ -346,19 +381,21 @@ function! s:mostshift()
     let l:most = []
     if !filereadable(@%) | return [0, []] | endif
     try
-        let l:most = split(system("mostshift '".@%."'"), '\_s\+')
+        let l:most = system('mostshift '.shellescape(@%))
     endtry
 
     let l:sw = 0
     if len(l:most) >= 1
-        let l:sw = str2nr(l:most[0])
-        let l:flags = split(get(l:most, 1, ''), ',')
+        let l:flags = json_decode(l:most)
+        if l:flags.shifts[l:flags.indent] >=8
+            let l:sw = l:flags.indent
+        endif
     endif
     return [l:sw, l:flags]
 endfunction
 
-" note: unlike BufReadPost this is called each time when switching 
-" windows, so we use a buffer flag to prevent multiple
+" note: unlike BufReadPost this is called each time when switching
+" windows, so we use a buffer flag to prevent multiple calls
 function! s:end_bufenter_hook()
     if !get(b:, 'do_end_bufenter_hook', 0) | return | endif
     let b:do_end_bufenter_hook = 0
@@ -373,6 +410,12 @@ function! s:end_bufenter_hook()
         let &shiftwidth = l:sw
         let &tabstop = l:sw
         if !&et | setl et | endif
+    endif
+
+    " if file frequently uses tabs at the start of lines, assume ts=8
+    if !empty(l:flags) && l:flags.tab_start > 10
+            \ && l:flags.tab_start >= 0.9*l:flags.tab_lines
+        setl ts=8 noet
     endif
 
     " file uses a mix of tabs and spaces
@@ -493,9 +536,106 @@ end
 " ────────────────────────────────────────────────────────────────────────
 " plugin options {{{1
 
+" asyncomplete {{{2
+" set noshowmode
+" set completeopt=menu,longest,noselect,preview
+" set completeopt=menu,noselect,preview
+" let g:asyncomplete_auto_popup = 0
+
+" let g:asyncomplete_auto_popup = 1
+" set completeopt=menuone,noselect,preview
+
+" let g:asyncomplete_remove_duplicates = 0
+
+" XXX
+" autocmd User asyncomplete_setup call asyncomplete#register_source(
+"     \ asyncomplete#sources#necovim#get_source_options({
+"     \     'name': 'necovim',
+"     \     'priority': 10,
+"     \     'whitelist': ['vim'],
+"     \     'completor': function('asyncomplete#sources#necovim#completor'),
+"     \ }))
+
+" autocmd User asyncomplete_setup call asyncomplete#register_source(
+"     \ asyncomplete#sources#omni#get_source_options({
+"     \     'name': 'omni',
+"     \     'whitelist': ['*'],
+"     \     'blacklist': ['html'],
+"     \     'completor': function('asyncomplete#sources#omni#completor')
+"     \ }))
+
+" autocmd User asyncomplete_setup call asyncomplete#register_source(
+"     \ asyncomplete#sources#necosyntax#get_source_options({
+"     \     'name': 'necosyntax',
+"     \     'whitelist': ['*'],
+"     \     'completor': function('asyncomplete#sources#necosyntax#completor'),
+"     \ }))
+
+" autocmd User asyncomplete_setup call asyncomplete#register_source(
+"     \ asyncomplete#sources#tags#get_source_options({
+"     \   'name': 'tags',
+"     \   'whitelist': ['*'],
+"     \   'completor': function('asyncomplete#sources#tags#completor'),
+"     \   'config': {
+"     \      'max_file_size': 10000000,
+"     \   },
+"     \ }))
+
+" call asyncomplete#register_source(
+"     \ asyncomplete#sources#buffer#get_source_options({
+"     \   'name': 'buffer',
+"     \   'priority': 0,
+"     \   'whitelist': ['*'],
+"     \   'blacklist': ['go'],
+"     \   'completor': function('asyncomplete#sources#buffer#completor'),
+"     \ }))
+
+" function! s:check_back_space() abort
+"     let col = col('.') - 1
+"     return !col || getline('.')[col - 1]  =~ '\s'
+" endfunction
+
+" inoremap <silent><expr> <tab>
+"     \ pumvisible() ? "\<c-n>" :
+"     \ <sid>check_back_space() ? "\<tab>" :
+"     \ asyncomplete#force_refresh()
+
+" " set completeopt=menuone,noselect
+
+" " set <s-tab>=[Z
+" inoremap <expr> <s-tab> pumvisible() ? "\<c-p>" : "\<s-tab>"
+
+" }}}2
+
 " clipbrd {{{2
 "
 let g:no_clipbrd_maps = 1
+
+" }}}2
+
+" interestingwords {{{2
+
+" let g:interestingWordsDefaultMappings = 0
+" workaround buggy plugin mapping...
+nmap <silent> <leader>h :<c-u>exe "normal \<plug>InterestingWords"<cr>
+vmap <silent> <leader>h <plug>InterestingWords
+nmap <silent> <leader>H <plug>InterestingWordsClear
+
+let g:interestingWordsRandomiseColors = 1
+
+" }}}2
+
+" lotr {{{2
+
+let g:lotr_winsize=50
+nmap <silent> <leader>R <plug>LOTRToggle
+
+" }}}2
+
+" match-up {{{2
+
+let g:matchup_override_vimtex = 1
+nmap <silent> <leader>% <plug>(matchup-hi-surround)
 
 " }}}2
 
@@ -509,15 +649,10 @@ nmap <silent> <leader>n <Plug>NrrwrgnDo
 
 " }}} 2
 
-" vim-lotr {{{2
-
-nmap <sid>(lotr-toggle) <plug>LOTRToggle
-
-" }}}2
-
 " scratch {{{2
 
 let g:scratch_autohide = 1
+let g:scratch_no_mappings = 1
 
 " }}}2
 
@@ -536,6 +671,10 @@ let g:unicoder_cancel_insert = 1
 let g:unicoder_cancel_visual = 1
 let g:unicoder_no_map = 1
 
+" nnoremap <Plug>Unicoder :call unicoder#start(0)<CR>
+" inoremap <Plug>Unicoder <C-o>:call unicoder#start(1)<CR>
+" vnoremap <Plug>Unicoder :<C-u>call unicoder#selection()<CR>
+
 " XXX todo
 " nnoremap <C-l> :call unicoder#start(0)<CR>
 " inoremap <C-l> <Esc>:call unicoder#start(1)<CR>
@@ -544,15 +683,26 @@ let g:unicoder_no_map = 1
 " }}}2
 
 " ultisnips {{{2
-let g:UltiSnipsSnippetDirectories=["ultisnips"]
-let g:UltiSnipsExpandTrigger='<c-z>'  " '<sid>(snipexpand)'
-let g:UltiSnipsListSnippets='<sid>(sniplist)'
-let g:UltiSnipsJumpForwardTrigger='<c-f>'
-let g:UltiSnipsJumpBackwardTrigger='<c-b>'
-" let g:UltiSnipsJumpForwardTrigger='<c-j>'  
-" let g:UltiSnipsJumpBackwardTrigger='<c-k>'
+let g:UltiSnipsSnippetDirectories = ['ultisnips']
+let g:UltiSnipsSnippetsDir='/home/andy/.vim/ultisnips'
+let g:UltiSnipsExpandTrigger='<plug>(ultisnips-expand)'
+" let g:UltiSnipsExpandTrigger='<f27>'
+" let g:UltiSnipsExpandTrigger='<c-g>p'
+let g:UltiSnipsListSnippets='<c-z>'   " '<sid>(sniplist)'
+" let g:UltiSnipsJumpForwardTrigger='<c-t>'
+" let g:UltiSnipsJumpBackwardTrigger='<c-d>'
+let g:UltiSnipsJumpForwardTrigger='<c-j>'
+let g:UltiSnipsJupBackwardTrigger='<c-k>'
+" let g:UltiSnipsJumpForwardTrigger='<c-n>'
+" let g:UltiSnipsJupBackwardTrigger='<c-p>'
 
+imap <c-g>p     <plug>(ultisnips-expand)
+imap <c-g><c-p> <plug>(ultisnips-expand)
 
+xmap <c-\>p     <plug>(ultisnips-expand)
+xmap <c-\><c-p> <plug>(ultisnips-expand)
+
+" imap <silent> x <sid>(sniplist)
 
 " TODO XXX
 function! UltiSnipsShim()
@@ -565,11 +715,13 @@ function! UltiSnipsShim()
 endfunction
 " inoremap <c-]> <c-r>=UltiSnipsShim()<cr>
 
+" xmap <silent> <c-x> <f27>
+
 " let g:UltiSnipsListSnippets
 
 " let g:vimtex_imaps_snippet_engine = 'ultisnips'
-    " \ 'leader' : 0, 
- 
+    " \ 'leader' : 0,
+
 " }}}2
 
 " vimtex {{{2
@@ -626,7 +778,7 @@ augroup END
 
 " vimtex delims {{{3
 
-let g:vimtex_delim_list = {'mods' : {}, 'delim_tex': {}, 
+let g:vimtex_delim_list = {'mods' : {}, 'delim_tex': {},
       \ 'delim_math': {} }
 
 let g:vimtex_delim_list.mods.name = [
@@ -652,14 +804,14 @@ let g:vimtex_delim_list.delim_tex.name = [
       \]
 
 let g:vimtex_delim_list.delim_math.name = [
-      \ ['(', ')'],             ['\{', '\}'], 
+      \ ['(', ')'],             ['\{', '\}'],
       \ ['\lvert', '\rvert'],   ['\lVert', '\rVert'],
       \ ['\lfloor', '\rfloor'], ['\lceil', '\rceil'],
       \ ['\langle', '\rangle'], ['\ulcorner', '\urcorner'],
       \ ['[', ']'],
       \]
 let g:vimtex_delim_list.delim_math.re = [
-      \ ['(', ')'],             ['\\{', '\\}'], 
+      \ ['(', ')'],             ['\\{', '\\}'],
       \ ['\\lvert', '\\rvert'],   ['\\lVert', '\\rVert'],
       \ ['\\lfloor', '\\rfloor'], ['\\lceil', '\\rceil'],
       \ ['\\langle', '\\rangle'], ['\\ulcorner', '\\urcorner'],
@@ -671,7 +823,7 @@ let g:vimtex_delim_list.delim_math.re = [
 let g:vimtex_compiler_latexmk = {
     \   'backend'    : 'jobs',
     \   'background' : 1,
-    \   'continuous' : 0, 
+    \   'continuous' : 0,
     \   'callback'   : 0
     \}
 
@@ -708,6 +860,8 @@ function! s:latexSurround()
    let b:surround_{char2nr("e")}
      \ = "\\begin{\1environment: \1}\n\t\r\n\\end{\1\1}"
    let b:surround_{char2nr("c")} = "\\\1command: \1{\r}"
+
+   " let b:surround_{char2nr('f')} = '\\frac\_s*{\r}\_s*{'
 endfunction
 
 
@@ -719,7 +873,7 @@ function! VimtexHelpLookup()
     if empty(l:candidates)
         echom 'nothing'
     else
-        let l:pkgname = matchlist(l:candidates[0].menu, 
+        let l:pkgname = matchlist(l:candidates[0].menu,
             \ '\v\[cmd:\s+(.+)\]')[1]
         echom l:pkgname
     end
@@ -730,7 +884,7 @@ endfunction
 
 
 " xxx this is bad, fix
-" let g:ycm_semantic_triggers.text = [ 
+" let g:ycm_semantic_triggers.text = [
 "     \ 're!:arrow',
 "     \ ]
 
@@ -747,7 +901,7 @@ endfunction
 
 
     " au User VimtexEventQuit     echo &filetype | sleep 10
-    " au User VimtexEventQuit     echo b:vimtex.tex | exe 'VimtexClean'   | sleep 1 
+    " au User VimtexEventQuit     echo b:vimtex.tex | exe 'VimtexClean'   | sleep 1
     " au User VimtexEventInitPost echo b:vimtex.tex | exe 'VimtexCompile' | sleep 1
     " au VimLeavePre * call VimtexCleanViewers()
     " au User VimtexEventQuit call VimtexCleanViewers()
@@ -964,7 +1118,9 @@ function! ThisWay()
     else
         let l:mark = ''
     endif
-    return (winnr('#') == winnr() ? '✧' : '✦')
+    return (&winfixheight ? '↕' : '')
+            \ . (&winfixwidth ? '↔' : '')
+            \ . (winnr('#') == winnr() ? '✧' : '✦')
             \ . winnr().'.'.bufnr("%").l:mark.' '
 endfunction
 call airline#parts#define_function('thisway', 'ThisWay')
@@ -995,7 +1151,8 @@ let g:airline#extensions#windowswap#enabled = 1
 let g:airline#extensions#windowswap#indicator_text = '👌' " 🍔 WS'
 
 au User AirlineAfterInit let g:airline_section_z
-    \ = airline#section#create( ['windowswap', 'gutentagsb', 'thisway', 
+    \ = airline#section#create( ['windowswap', 
+    \ 'gutentagsb', 'thisway', 'yankindicator',
     \ 'linenr', 'maxlinenr', ' :%3v'] )
 
 " au User GutentagsUpdated call airline#update_statusline()
@@ -1099,10 +1256,10 @@ let g:no_viewdoc_maps = 1
 
 
 " XXX leftabove instead
-cnoreabbrev <expr> h      getcmdtype()==':'
-    \ && getcmdline()=='h'     ? 'topleft help' : 'h'
-cnoreabbrev <expr> help   getcmdtype()==':'
-    \ && getcmdline()=='help'  ? 'topleft help' : 'help'
+" cnoreabbrev <expr> h      getcmdtype()==':'
+"     \ && getcmdline()=='h'     ? 'topleft help' : 'h'
+" cnoreabbrev <expr> help   getcmdtype()==':'
+"     \ && getcmdline()=='help'  ? 'topleft help' : 'help'
 
 "}}}2
 
@@ -1169,15 +1326,18 @@ endif
 
 let g:ctrlp_clear_cache_on_exit = 1
 
-let g:ctrlp_map = ''
-let g:ctrlp_cmd = 'CtrlPMRUFiles'
+let g:ctrlp_map = '<leader>o'
+let g:ctrlp_cmd = 'CtrlP'
 let g:ctrlp_prompt_mappings = {
     \ 'PrtClearCache()':      ['<c-g>'],
     \ 'ToggleByFname()':      ['<c-d>'],
     \ 'PrtExit()':            ['<esc>', '<c-c>'],
     \ }
 
-let g:ctrlp_working_path_mode = 'ca'
+" let g:ctrlp_working_path_mode = 'rc'
+let g:ctrlp_working_path_mode = 'ra'
+
+let g:ctrlp_root_markers = ['.projections.json']
 
 
 " call CtrlPGeneric(a_vim_list, 'MyGreatCallback')
@@ -1195,9 +1355,42 @@ let g:figletFont='slant'
 
 " }}}2
 
-" markdown (@gabrielelana, @ibabushkin) {{{2
+" markdown {{{2
 
+" (@gabrielelana, @ibabushkin) 
 let g:markdown_enable_mappings = 0
+
+" @plasticboy
+let g:vim_markdown_no_default_key_mappings = 1
+let g:vim_markdown_frontmatter = 1
+
+" let g:vim_markdown_folding_disabled = 1
+let g:vim_markdown_folding_level = 6
+
+" base (@tpope)
+let g:markdown_folding = 1
+let g:markdown_fenced_languages = ['html', 'vim']
+
+" }}}2
+
+" mu-complete {{{2
+
+" let g:mucomplete#no_mappings = 1
+" imap <tab> <plug>(MUcompleteFwd)
+
+" XXX move to completion section
+
+" set shortmess+=c
+" set completeopt+=noinsert
+" ,noselect
+" set completeopt+=menuone
+
+let g:mucomplete#chains = {
+    \ 'default' : ['path', 'omni', 'keyn', 'dict', 'uspl'],
+    \ 'vim'     : ['path', 'cmd', 'keyn'],
+    \ 'tex'     : ['ulti', 'keyn'],
+    \ }
+let g:mucomplete#ultisnips#match_at_start = 0
 
 " }}}2
 
@@ -1239,6 +1432,7 @@ let g:ycm_semantic_triggers.tex = [
     \ 're!\\[A-Za-z]*',
     \ ]
 
+let g:ycm_min_num_of_chars_for_completion = 6
 " let g:ycm_min_num_of_chars_for_completion = 99
 " let g:ycm_cache_omnifunc = 0
 
@@ -1317,7 +1511,9 @@ let g:ycm_filetype_blacklist = {
 " echo &runtimepath
 
 " tpope's commentary {{{2
+
 let g:commentary_map_backslash = 0
+
 " }}}2
 
 " latex-to-unicode provided by the julia plugin {{{2
@@ -1345,6 +1541,12 @@ let g:syntastic_mode_map = {
 
 " XXX get mlint working
 "    \ "passive_filetypes" : [ "matlab" ] }
+
+" }}}2
+
+" sudoedit {{{2
+
+let g:sudo_no_gui=1
 
 " }}}2
 
@@ -1405,12 +1607,78 @@ endfunction
 " notes
 "   I use youcompleteme, so only the omnifunc is relevant
 
+" list of manual expansions/completions in insert mode
+"
+" <c-g>e     : emoji expand
+" <c-g>d     : digraph combine
+" <c-g>l     : latex-to-unicode
+" <c-g>p     : snippet expand
+" <c-g>s     : surround
+" 
+" <c-\>{id}  : quick snippet (ft dependent)
+" <c-\>{cmd} : various shadowed commands
+
+" <c-x>z     : unicode
+" <c-x><c-g> : digraph
+" <c-x>e     : emoji complete
+" <c-x>"     : registers        (TODO)
+" <c-x><cr>  : auto-close       (TODO)
+
+
+
+" language server protocol functions (TBD)
+"     LspDefinition 
+"     LspDocumentSymbol 
+"     LspDocumentDiagnostics 
+"     LspHover 
+"     LspReferences 
+"     LspRename 
+"     LspWorkspaceSymbol 
+"     LspDocumentFormat
+"
+
+" function! asyncomplete#sources#necovim#completor(opt, ctx)
+"     let l:typed = a:ctx['typed']
+"     let l:startcol = necovim#get_complete_position(l:typed)
+"     let l:base = strpart(l:typed, l:startcol)
+"     let l:matches = necovim#gather_candidates(l:typed, l:base)
+"     call asyncomplete#complete(a:opt['name'], a:ctx, l:startcol+1, l:matches)
+" endfunction
+
+
+" complete-function
+
+function! NecoCompleteWrapper(findstart, base)
+  let l:typed = strpart(getline(line('.')), 0, col('.')-1)
+  if a:findstart
+    return necovim#get_complete_position(l:typed)
+  else
+    let l:matches = necovim#gather_candidates(l:typed, a:base)
+    let l:pat = '^\V'.escape(a:base, '\')
+    call filter(l:matches, 'v:val.word =~# l:pat')
+    return l:matches
+  endif
+  return -1
+endfunction
+
+function! OmniWrapper(findstart, base)
+    if empty(&omnifunc)
+        return -1
+    endif
+    return call(&omnifunc, [a:findstart, a:base])
+endfunction
 
 " defines a sequence of completion fall-backs
 let g:user_completion_chain = [
-     \ 'emoji#complete', 
-     \ 'syntaxcomplete#Complete',
-     \ ]
+    \ 'NecoCompleteWrapper',
+    \]
+
+    " \ 'emoji#complete', 
+    " \ 'OmniWrapper',
+    " \ 'syntaxcomplete#Complete',
+
+" LaTeXtoUnicode#omnifunc?
+" https://github.com/joom/latex-unicoder.vim
 
 function! CompletionChain(findstart, base)
   if a:findstart
@@ -1438,6 +1706,8 @@ function! CompletionChain(findstart, base)
   return []
 endfunction
 
+set completefunc=CompletionChain
+
 " this is called after the ftplugin, so iff the file type plugin
 " provides no file type-specific omnifunc, use the custom chain
 function! s:set_omni_completion(ft)
@@ -1445,7 +1715,7 @@ function! s:set_omni_completion(ft)
         setlocal omnifunc=CompletionChain
     endif
 endfunction
-autocmd FileType * call s:set_omni_completion(expand("<amatch>")) 
+" autocmd FileType * call s:set_omni_completion(expand("<amatch>")) 
 
 " this is called before the ftplugin, so we can set the ycm 
 " triggers just in time...
@@ -1473,13 +1743,39 @@ endfor
 
 " autocmd User PreFileType_ALL call s:set_ycm_triggers(expand("<amatch>"))
 
+" let g:hypothetical_completion_chain = [
+    " \ { ft: '*', [] },
+    " \ ]
+
+" completion maps {{{2
+
+" may always use <cr> to accept completion
+inoremap <expr> <cr> pumvisible() ? "\<c-y>" : "\<cr>"
+
+function! s:check_back_space() abort
+    return col('.') <= 1 || getline('.')[col('.')-2]  =~ '\s'
+endfunction
+
+" tab to advance, tab if preceding space, otherwise start completion
+inoremap <silent><expr> <tab>
+    \ pumvisible() ? "\<c-n>" :
+    \ <sid>check_back_space() ? "\<tab>" :
+    \ "\<c-x><c-u>"
+
+"    \ "\<c-g>u\<c-x><c-u>"
+
+inoremap <expr> <s-tab> pumvisible() ? "\<c-p>" : "\<c-d>"
+
+set completeopt=menu,longest,noselect,preview
+set shortmess+=c
+
 " allow page-up/page-down in the completion menu (XXX needs testing)
 inoremap <silent> <expr> <c-u> pumvisible() ? "\<pageup>"   : "\<c-u>"
 inoremap <silent> <expr> <c-d> pumvisible() ? "\<pagedown>" : "\<c-d>"
 
+" }}}2
 
 " explicit completion is performed with ctrl-L
-
 
 " TODO expansion patterns
 
@@ -1487,6 +1783,7 @@ inoremap <silent> <expr> <c-d> pumvisible() ? "\<pagedown>" : "\<c-d>"
 " mnemonic: ending ]
 let g:user_expansion_chain = [
          \ 's:ExpandSnippet', 
+         \ 's:ExpandPairs',
          \ 's:ExpandEmoji', 
          \ 's:ExpandFallback',
          \ ]
@@ -1504,9 +1801,34 @@ function! s:ExpandEmoji()
    return EmojiReplace()
 endfunction
 
-function! s:ExpandFallback()
+function! s:ExpandPairs()
+    let l:pairs = split(&mps, ',')
+    let l:open  = map(copy(l:pairs), 'split(v:val, ":")[0]')
+    let l:close = map(copy(l:pairs), 'split(v:val, ":")[1]')
+    let [l:lnum, l:cnum] = searchpairpos(
+        \ '\V'.join(l:open, '\|'), '',
+        \ '\V'.join(l:close, '\|'), 'bnW', '', line('.'))
+    if !l:lnum | return 0 | endif
+    let l:char = getline(l:lnum)[l:cnum-1]
+    let l:idx = index(l:open, l:char)
+    if l:idx < 0 | return 0 | endif
+    return l:close[l:idx]
+endfunction
+
+" function! s:ExpandFT()
+"     imap <silent><buffer> <c-x><cr> <plug>(vimtex-delim-close)
+"     return 0
+" endfunction
+
+function! s:ExpandCmpl()
    call feedkeys("\<F19>")
    return 1
+endfunction
+
+function! s:ExpandFallback()
+   return "\<c-x>\<c-o>"
+   " return "\<c-]>"
+   " return 1
 endfunction
 
 function! s:DoExpansion()
@@ -1514,6 +1836,9 @@ function! s:DoExpansion()
       let l:ret = call(l:fcn, [])
       if l:ret isnot 0
          let s:current_expansion = fcn
+         if l:ret isnot 1
+             return l:ret
+         endif
          return ''
       endif
    endfor
@@ -1524,10 +1849,10 @@ endfunction
 " insert available: Ctrl-L Ctrl-G. Ctrl-Z Ctrl-/ Ctrl-B... Ctrl-F Ctrl-]...
 
 " <c-r> instead of <expr> because we may modify the buffer
-imap <sid>(expansion) <c-r>=<sid>DoExpansion()<cr>
+imap <silent> <sid>(expansion) <c-r>=<sid>DoExpansion()<cr>
 
 " <c-r>=UltiSnipsShim()<cr>
-imap <c-]> <sid>(expansion)
+imap <silent> <c-]> <sid>(expansion)
 
 " function! FFF()
 "    return mode()
@@ -1757,10 +2082,7 @@ function! ToggleList(bufname, pfx)
         return
     endif
     let winnr = winnr()
-    exec a:pfx.'open 8'
-    " if winnr() != winnr
-    "     wincmd p
-    " endif
+    exec 'botright' a:pfx.'open 8'
 endfunction
 
 
@@ -1770,6 +2092,7 @@ command! Unbind windo setl noscrollbind nocursorbind nocursorline
 " folding
 set foldmethod=marker
 " set foldlevel=0 foldcolumn=0
+" RecordOptions
 set foldtext=FoldText()
 
 function! FoldText()
@@ -1780,22 +2103,25 @@ function! FoldText()
         let l:line = substitute(getline(l:fs), '\t',
             \ repeat(' ', &tabstop), 'g')
     endif
-    let l:cms = split(substitute(&commentstring, ' ', '', 'g' ), '%s')
-    let l:line = substitute(l:line, ''.l:cms[0] . '\s*', '', '')
+    let l:cms = split(&commentstring, '%s')
+    let l:line = substitute(l:line, '\V'.l:cms[0].'\m\s*', '', '')
+    let l:line = substitute(l:line, '\s*\V'.l:cms[1], '', '')
     let l:line = substitute(l:line, '{\{3}\d\?\s*', '', '')
+    let l:line = substitute(l:line, '^\s\+', '', '')
     let l:line = substitute(l:line, '\s\+$', '', '')
+    let l:width = (&textwidth > 0 ? &textwidth : 74)
+    let l:line = strcharpart(l:line, 0, l:width-22)
 
     let l:foldSize = 1 + v:foldend - v:foldstart
-    let l:foldSizeStr = l:foldSize . ' lines'
-    let l:foldLevelStr = repeat('•', v:foldlevel)
+    let l:foldSizeStr = printf('%2dl', l:foldSize)
+    let l:foldLevelStr = printf('%2S', repeat('•', v:foldlevel))
     let l:lineCount = line('$')
-    let l:foldPerc = printf('(%.1f%%)', (100.0*l:foldSize)/l:lineCount)
+    let l:foldPerc = printf('(%4.1f%%)', (100.0*l:foldSize)/l:lineCount)
     let l:left = '[ ' . l:line . ' '
     let l:right = ' ' . l:foldSizeStr . ' '
         \ . l:foldLevelStr . ' ' . l:foldPerc . ' ]'
-    let l:width = (&textwidth > 0 ? &textwidth : 74)
     let l:expansionString = repeat('·', 
-        \ l:width - strwidth(l:left . l:right))
+        \ l:width - strdisplaywidth(l:left . l:right))
     return l:left . l:expansionString . l:right
 endfunction
 
@@ -1877,10 +2203,34 @@ function! RefreshAppearance()
    endif
 endfunction
 
+" change a register's type
+" function s:RegType(...)
+"     let l:type = a:0 ? 'v'
+"     let l:register = a:0 ? '"'
+"     if ! 
+" endfunction
+" command! -nargs=+ RegType call s:RegType(<q-args>)
+
+function! s:SetRegType(type)
+    call setreg(v:register, getreg(v:register), a:type)
+    let l:type = {
+        \ 'c'  : 'characterwise',
+        \ 'l'  : 'linewise',
+        \ 'b'  : 'blockwise-visual',
+        \ 'v'  : 'characterwise',
+        \ 'V'  : 'linewise',
+        \ "" : 'blockwise-visual'
+        \}[a:type]
+    echo '"'.v:register.'''s type changed to' l:type
+endfunction
+nnoremap <silent> =v :<c-u>call <sid>SetRegType('v')<cr>
+nnoremap <silent> =V :<c-u>call <sid>SetRegType('V')<cr>
+nnoremap <silent> =<c-v> :<c-u>call <sid>SetRegType('b')<cr>
+
 " really clear all the registers, writes viminfo
 function! s:ClearRegisters(...)
     let l:regs = a:0 ? a:1
-        \ : 'abcdefghijklmnopqrstuvwxyz0123456789*+-'
+        \ : 'abcdefghijklmnopqrstuvwxyz0123456789*+-/'
     for l:r in split(l:regs, '\zs')
         if getreg(l:r) isnot ''
             call setreg(l:r, '')
@@ -2083,7 +2433,9 @@ endfunction
 
 " help
 function! s:rc_filetype_help_maps()
-    nnoremap <silent><buffer> q :<c-u>bd<cr>
+    if !&modifiable
+        nnoremap <silent><buffer> q :<c-u>bd<cr>
+    endif
     nnoremap <silent><buffer> K
         \ :<c-u>exe 'topleft help '.scriptease#helptopic()<cr>
 endfunction
@@ -2091,6 +2443,8 @@ augroup rc_filetype_help
     au!
     autocmd FileType help if &buftype == 'help'
         \ | call s:rc_filetype_help_maps() | endif
+    autocmd FileType help if &buftype == 'help' && !&modifiable
+        \ && !exists('w:fixpos') | wincmd K | let w:fixpos = 1| endif
 augroup END
 
 " latex
@@ -2099,8 +2453,8 @@ function! s:rc_pre_filetype_tex_maps()
     imap <silent><buffer> <c-x><cr> <plug>(vimtex-delim-close)
 
     " shift-return alternative: xxx experimental
-    execute "set <f26>=\<esc>OM"
-    imap <silent><buffer> <f26> <plug>(vimtex-delim-close)
+    " execute "set <f26>=\<esc>OM"
+    " imap <silent><buffer> <f26> <plug>(vimtex-delim-close)
 
     " change directory to tex root
     nnoremap <silent><buffer> <leader>l.
@@ -2111,8 +2465,13 @@ function! s:rc_pre_filetype_tex_maps()
     " delimiter modifier toggling e.g., \big( -> \Big(
     nmap <silent><buffer> cd <plug>(vimtex-delim-toggle-modifier)
     nmap <silent><buffer> cD <plug>(vimtex-delim-toggle-modifier-reverse)
-    xmap <silent><buffer> <c-bslash>d <plug>(vimtex-delim-toggle-modifier)
-    xmap <silent><buffer> <c-bslash>D <plug>(vimtex-delim-toggle-modifier-reverse)
+
+    " c-\ instead of c for visual mode
+    xmap <silent><buffer> <c-bslash>d
+        \ <plug>(vimtex-delim-toggle-modifier)
+    xmap <silent><buffer> <c-bslash>D
+        \ <plug>(vimtex-delim-toggle-modifier-reverse)
+
     nmap <silent><buffer> csE <plug>(vimtex-env-toggle-star)
     nmap <silent><buffer> csC <plug>(vimtex-cmd-toggle-star)
     " xxx find alternative maps.. cd, cD, co, cO, csd+/-?
@@ -2131,6 +2490,13 @@ function! s:rc_post_filetype_tex_maps()
     " update and compile
     nnoremap <silent><buffer> <leader><bslash> :<c-u>up<cr>:VimtexCompile<cr>
     nnoremap <silent><buffer> <F5> :<c-u>up<cr>:VimtexCompile<cr>
+
+    " expansion short-cuts
+   imap <silent><buffer> <c-\>f <c-g>ufrac<c-g>p
+   imap <silent><buffer> <c-\>i <c-g>uint<c-g>p
+   imap <silent><buffer> <c-\>I <c-g>uInt<c-g>p
+   " inoremap <silent><buffer> <c-\>f <c-g>u\frac{}{}<c-\><c-o>3h
+   " inoremap <silent><buffer> <c-\>i <c-g>u\int_{}^{}<c-\><c-o>4h
 endfunction
 
 augroup rc_filetype_tex
@@ -2158,6 +2524,10 @@ augroup rc_filetype_tex
     " vimtex + surround
     autocmd FileType tex call s:latexSurround()
 
+    " match-up
+    " autocmd FileType tex let b:matchup_matchparen_enabled = 0
+    "     \ | let b:matchup_matchparen_fallback = 0
+
 augroup END
 
 " matlab
@@ -2170,20 +2540,59 @@ augroup END
 
 " python
 let g:python_highlight_all = 1
+let g:python_recommended_style = 0
 
 " quickfix
 function! QuickFixFold()
     return matchstr(getline(v:lnum),'^[^|]\+') ==#
         \ matchstr(getline(v:lnum+1),'^[^|]\+') ? 1 : '<1'
 endfunction
+
+" XXX
+execute "set <f26>=\<esc>OM"
+inoremap <silent><expr> <f26>
+    \ synIDattr(synID(line('.'), col('.')-1, 1), 'name') =~? 'comment'
+    \ ? "\<cr>\<c-u>"
+    \ : "\<cr>"
+
+function! QfOpen(num)
+    if get(get(getqflist(), 1, {}), 'bufnr', 0) < 1
+        leftabove new
+    endif
+    execute a:num.'cc'
+endfunction
+function! QfOpenForce(num)
+    leftabove new
+    let l:oldsb = &switchbuf
+    set switchbuf=
+    execute a:num.'cc'
+    let &switchbuf = l:oldsb
+endfunction
+
 augroup rc_filetype_qf
     au!
-    autocmd FileType qf setlocal wrap textwidth=0 nospell
+    autocmd FileType qf setlocal nowrap textwidth=0 nospell
         \ foldlevel=0 foldmethod=expr foldcolumn=1 foldopen+=jump
         \ foldexpr=QuickFixFold()
     autocmd FileType qf nnoremap <silent><buffer> q :<c-u>bd<cr>
+
+    " autocmd FileType qf nnoremap <silent><buffer> <f26>
+    "         \ :<c-u>execute 'wincmd s \| '.line('.').'cc \| '.winnr().'wincmd J'<cr>
     " autocmd FileType qf nnoremap <cr> :exe 'wincmd p \| '.line('.').'cc'<cr>
     " syn match Error /\f\+\// conceal cchar=…
+
+    " open in previous window 
+    autocmd FileType qf nnoremap <cr>
+        \ :<c-u>exe 'wincmd p \| '.line('.').'cc'<cr>
+
+    autocmd FileType qf nnoremap <c-w><cr>
+        \ :<c-u>call QfOpenForce(line('.'))<cr>
+
+        " \ :<c-u>exe 'leftabove new \| '.line('.').'cc'<cr>
+
+    autocmd FileType qf nnoremap <f26> <c-w><cr>
+
+    autocmd FileType qf autocmd BufEnter <buffer> if winnr('$') < 2 | q | endif
 augroup END
 
 " vim
@@ -2193,6 +2602,14 @@ augroup rc_filetype_vim
         \ :<C-U>exe 'topleft help '.scriptease#helptopic()<CR>
 augroup END
 
+" miscellaneous
+augroup rc_filetype_misc
+    au!
+    autocmd FileType yaml set nospell
+    autocmd FileType markdown set foldlevel=1
+    autocmd BufWinEnter *zsh* if &buftype == 'terminal'
+        \ | setlocal nonumber | endif
+augroup END
 
 " }}}1
 
@@ -2241,8 +2658,8 @@ nmap  yP <Plug>unimpairedPastei
 " noremap <silent> <leader>le :<C-U>call OpenLog()<CR>
 
 " change to file's directory, locally or globally
-nnoremap <silent> <leader>.  :<C-U>lcd %:p:h<CR>:pwd<CR>
-nnoremap <silent> g.         :<C-U>cd %:p:h<CR>:pwd<CR>
+nnoremap <silent> <leader>.  :<C-U>lcd %:p:h<CR>:AirlineRefresh\|pwd<CR>
+nnoremap <silent> g.         :<C-U>cd %:p:h<CR>:AirlineRefresh\|pwd<CR>
 
 " tagbar show and hide
 nnoremap <silent> <leader>T  :<C-U>TagbarToggle<CR>
@@ -2353,8 +2770,21 @@ nnoremap <silent> <leader>y  :.w !tmux loadb -<CR>
 vnoremap <silent> <leader>y  :w<home>silent <end> !tmux loadb -<CR>
 
 " toggle syntastic
-nnoremap <silent> <leader>s  :<C-U>SyntasticCheck<CR>
-nnoremap <silent> <leader>S  :<C-U>call SyntaxToggle()<CR>
+" nnoremap <silent> <leader>s  :<C-U>SyntasticCheck<CR>
+" nnoremap <silent> <leader>S  :<C-U>call SyntaxToggle()<CR>
+
+" surround
+nmap <leader>s  <Plug>Ysurround
+nmap <leader>S  <Plug>YSurround
+nmap <leader>ss <Plug>Yssurround
+nmap <leader>Ss <Plug>YSsurround
+nmap <leader>SS <Plug>YSsurround
+
+" scratch
+nmap <leader>K <plug>(scratch-insert-reuse)
+nmap <leader>k <plug>(scratch-insert-clear)
+xmap <leader>K <plug>(scratch-selection-reuse)
+xmap <leader>k <plug>(scratch-selection-clear)
 
 " refresh syntax highlighting
 nnoremap <silent> <leader>z :<c-u>syntax sync fromstart<cr>
@@ -2416,8 +2846,8 @@ nmap <silent> <leader>6 :<C-U>CtrlPBuffer<CR>
 nmap <silent> <leader>p :<C-U>CtrlPBuffer<CR>
 
 nnoremap <silent> <leader>[ :<C-U>CtrlPMRUFiles<CR>
-nnoremap <silent> <leader>o :<C-U>CtrlP<CR>
-nnoremap <leader>O :<C-U>CtrlP 
+" nnoremap <silent> <leader>o :<C-U>CtrlP<CR>
+nnoremap <leader>O :<C-U>CtrlP<space>
 
 
     " exec 'pedit ' . a:file
@@ -2492,9 +2922,12 @@ let g:switch_custom_definitions = [
 nnoremap <leader>, <c-x>
 vnoremap <leader>, <c-x>
 vnoremap g<leader>, g<c-x>
+vnoremap <leader><lt> g<c-x>
+
 nnoremap <leader>; <c-a>
 vnoremap <leader>; <c-a>
 vnoremap g<leader>; g<c-a>
+vnoremap <leader>: g<c-a>
 
 nnoremap <silent> <plug>(tex-opt-incr) :<c-u>call TexOptionIncrement(1)<cr>
 nnoremap <silent> <plug>(tex-opt-decr) :<c-u>call TexOptionIncrement(-1)<cr>
@@ -2658,8 +3091,73 @@ xnoremap <silent> <leader>8 :<c-u>call SearchV()
 " dot can be used to repeat the search+change combo
 nnoremap <leader>c :call SearchWord() \| set hlsearch<cr>cgn
 
-" search for last small delete text
-" nnoremap z/ /<c-r>-<cr>
+nnoremap <expr> =c ':set conceallevel='.(&cole ? 0 : 2)."<cr>"
+    
+function! Text2Re(re, sp)
+    let l:esc = escape(a:re, &magic ? a:sp.".*~\[^$\\" : a:sp."^$\\")
+    return substitute(l:esc, '\n', '\\n', 'g')
+endfunction
+
+" search forward or backward for last small delete text
+function! KeepChanging(cmd)
+    if empty(@-) | return '' | endif
+    return a:cmd.Text2Re(@-, a:cmd)."\<cr>"
+endfunction
+nnoremap <expr> z; KeepChanging('/')
+nnoremap <expr> z, KeepChanging('?')
+
+function! GetVText()
+    let l:startpos = [line('v'), col('v')]
+    let l:endpos = [line('.'), col('.')]
+    echo l:startpos l:endpos
+    if l:startpos[0] > l:endpos[0] || l:startpos[0] == l:endpos[0]
+                \ && l:startpos[1] > l:endpos[1]
+        let [l:startpos, l:endpos] = [l:endpos, l:startpos]
+    endif
+    let l:text = getline(l:startpos[0], l:endpos[0])
+    if !len(l:text) | return [] | endif
+    if mode() ==# 'V' | return l:text | endif
+
+    let l:excl = &selection =~ '^e' ? 2 : 1
+    if mode() ==# "\<c-v>" || len(l:text) == 1
+        let l:text = map(l:text,
+            \ 'v:val[(l:startpos[1]-1):(l:endpos[1]-l:excl)]')
+    else
+        let l:text[-1] = l:text[-1][:(l:endpos[1]-l:excl)]
+        let l:text[0] = l:text[0][(l:startpos[1]-1):]
+    endif
+    return l:text
+endfunction
+
+function! CInsVesc()
+    if mode() ==? 'v' || mode() ==# "\<c-v>"
+        return Text2Re(join(GetVText(), "\n"), '/')
+    else
+        return Text2Re(expand("<cword>"), '/')
+    endif
+endfunction
+cnoremap <expr> <c-r><c-v> CInsVesc()
+function! CInsReg()
+    echon '"'
+    let l:reg = nr2char(getchar())
+    if empty(getregtype(l:reg))
+        return ''
+    endif
+    return Text2Re(getreg(l:reg), '/')
+endfunction
+cnoremap <expr> <c-r><c-l> CInsReg()
+
+function! VStartSearch()
+    " return "\<c-\>\<c-n>/".Text2Re(join(GetVText(), "\n"), '/')
+    let @/ = Text2Re(join(GetVText(), "\n"), '/')
+    " return "\<c-\>\<c-n>"
+    " return "o\<c-\>\<c-n>:-/".Text2Re(join(GetVText(), "\n"), '/')
+endfunction
+xnoremap <expr> <c-_> VStartSearch() \| set hlsearch
+
+nnoremap g/ :-/
+
+" nnoremap <expr> c<tab> KeepChanging()
 
 " xxx experimental
 " nnoremap <silent> <space>+
@@ -2750,14 +3248,34 @@ function! Relayout()
 endfunction
 nnoremap <silent> <c-w><space> :call Relayout()<cr>
 
+nnoremap <silent> <c-w><bslash> :<c-u>set winfixheight!<cr>
 
 " command! -nargs=* LayoutH call window#layout('ball', 'H', <args>)
 " nnoremap <c-w><space> :<c-u>LayoutH v:count<cr>
 
-nnoremap <c-w>gl :<c-u>call window#join('rightbelow vsplit', v:count)<cr>zs
-nnoremap <c-w>gh :<c-u>call window#join('leftabove vsplit', v:count)<cr>zs
-nnoremap <c-w>gj :<c-u>call window#join('belowright split', v:count)<cr>zs
-nnoremap <c-w>gk :<c-u>call window#join('aboveleft split', v:count)<cr>zs
+" nnoremap <c-w>gl :<c-u>call window#join('rightbelow vsplit', v:count)<cr>zs
+" nnoremap <c-w>gh :<c-u>call window#join('leftabove vsplit', v:count)<cr>zs
+" nnoremap <c-w>gj :<c-u>call window#join('belowright split', v:count)<cr>zs
+" nnoremap <c-w>gk :<c-u>call window#join('aboveleft split', v:count)<cr>zs
+
+function! WinMoveSoft(dir)
+    let l:bufnr = bufnr(0)
+    let l:winid = win_getid(winnr())
+    execute 'wincmd' a:dir
+    if a:dir ==# 'j' || a:dir ==# 'k'
+        vsplit
+    else
+        split
+    endif
+    execute 'buffer' l:bufnr
+    execute win_id2win(l:winid).'wincmd c'
+endfunction
+
+nnoremap <c-w>gh :<c-u>call WinMoveSoft('h')<cr>
+nnoremap <c-w>gj :<c-u>call WinMoveSoft('j')<cr>
+nnoremap <c-w>gk :<c-u>call WinMoveSoft('k')<cr>
+nnoremap <c-w>gl :<c-u>call WinMoveSoft('l')<cr>
+
 nnoremap <c-w>e :<c-u>call window#exchange(v:count)<cr>
 
 " sanity
@@ -2795,15 +3313,27 @@ nnoremap <silent> <a-char-62> :vertical res +1<cr>
 nnoremap <silent> <a-_> :res -1<cr>
 nnoremap <silent> <a-+> :res +1<cr>
 
+" tmaps shifted
+tnoremap <silent> <a-,> <c-w>:vertical res -5<cr>
+tnoremap <silent> <a-.> <c-w>:vertical res +5<cr>
+tnoremap <silent> <a--> <c-w>:res -3<cr>
+tnoremap <silent> <a-=> <c-w>:res +3<cr>
+
+" tmaps unshifted
+tnoremap <silent> <a-lt> <c-w>:vertical res -1<cr>
+tnoremap <silent> <a-char-62> <c-w>:vertical res +1<cr>
+tnoremap <silent> <a-_> <c-w>:res -1<cr>
+tnoremap <silent> <a-+> <c-w>:res +1<cr>
+
 " nnoremap gl :exe 'echo '.v:count<cr>
 
-set noequalalways  " window management
+set equalalways  " window management
 " set eadirection=ver,hor,both
 
 " enough for 3 windows stacked vertically with LINES=38, winminheight=1
 " set winheight=32 winwidth=16
-set winheight=16 winwidth=16
 set winminheight=1 winminwidth=0
+set winheight=11 winwidth=16
 
 let g:windowswap_map_keys = 0
 " XXX better keymaps?
@@ -2886,6 +3416,7 @@ nmap <silent> cpp cp_
 nmap <silent> cP cp$
 
 " special case similar to cw
+" TODO: need special handling if cursor is on blank?
 nmap <silent> cpw cpe
 
 " vinegar
@@ -2908,7 +3439,13 @@ nnoremap <silent> gM gm
 nnoremap <silent> gm :exe 'normal '.float2nr(1+&tw/2).'\|'<cr>
 
 " clipbrd
-nnoremap <leader>r :exe 'ClipBrd '.v:register<cr>z6<cr>
+function! s:clipbrd()
+    exe 'ClipBrd' v:register
+    resize 6
+    set winfixheight
+    nnoremap <buffer><silent> q :<c-u>q<cr>
+endfunction
+nnoremap <silent> <leader>r :<c-u>call <sid>clipbrd()<cr>
 
 " training
 function! s:Train(c)
@@ -2916,6 +3453,11 @@ function! s:Train(c)
     call Beep() | return a:c
 endfunction
 " nnoremap <silent><expr> q <sid>Train('q')
+" function! QAtHitEnter()
+"     let g:mode = mode(1)
+"     return 'q'
+" endfunction
+" nnoremap <silent><expr> q QAtHitEnter()
 
 " toggle textwidth/column
 nnoremap <silent> <leader>v :<c-u>call <sid>ToggleTextWidth()<cr>
@@ -3041,7 +3583,7 @@ nnoremap <silent> yc :<c-u>call <sid>reg_stuff_clip()<cr>
 function! s:vcol_updown(back)
     let l:col = getcurpos()[2] + getcurpos()[3]
     let l:line = search('\%'.l:col.'c\S', 'nW'.(a:back?'b':''))
-    return l:line.'G'
+    return l:line > 0 ? l:line.'G' : ''
 endfunction
 xnoremap <expr> <c-j> <sid>vcol_updown(0)
 xnoremap <expr> <c-k> <sid>vcol_updown(1)
@@ -3049,8 +3591,8 @@ xnoremap <expr> <c-k> <sid>vcol_updown(1)
 " search on screen only
 function! s:screen_search(op)
     let l:tl = winsaveview().topline
-    return a:op . '\%>'.(l:tl).'l'
-              \ . '\%<'.(l:tl+winheight(0)-1).'l'
+    return a:op . '\%(\%>'.(l:tl).'l'
+              \ . '\%<'.(l:tl+winheight(0)-1).'l\)'
 endfunction
 " function! s:screen_search(op)
 "     let l:tl = winsaveview().topline
@@ -3059,6 +3601,9 @@ endfunction
 nnoremap <expr> z/ <sid>screen_search('/')
 
 " nnoremap z/ /<c-r>-<cr>
+
+" previous window
+nnoremap <leader><space> <c-w>p
 
 " }}}1
 
@@ -3178,13 +3723,90 @@ function! QF_reshow()
     let l:win = filter(getwininfo(),
         \ 'v:val.quickfix && !v:val.loclist')
     if !empty(l:win)
-        exe l:win[0].winnr.'windo normal! zMzv'
+        let l:prev = winnr('#')
+        if l:prev | execute l:prev.'wincmd w' | endif
+        execute l:win[0].winnr . 'windo normal! zMzv'
     endif
 endfunction
-augroup qf_something
+augroup rc_qf_reshow
     au!
-    " au BufWinEnter * call QF_reshow()
+    au BufWinEnter * call QF_reshow()
 augroup END
+
+let @u = '/https\?:\/\/\(\w\+\(:\w\+\)\?@\)\?'
+    \ . '\([A-Za-z][-_0-9A-Za-z]*\.\)\{1,}'
+    \ . '\(\w\{2,}\.\?\)\{1,}\(:[0-9]\{1,5}\)\?\S*/'
+
+xnoremap <expr> @ ':normal @'.nr2char(getchar())."\<cr>"
+
+function! FindMisspelled(line1, line2, clear) range
+  if !empty(&buftype) | return | endif
+  let l:view = winsaveview()
+  normal! m'
+  execute ':'.a:line1
+  let l:lastpos = [1, 1]
+  let l:entries = []
+  while 1
+    silent! keepjumps normal! ]S
+    if line('.') < l:lastpos[0] || line('.') == l:lastpos[0]
+          \ && col('.') == l:lastpos[1]
+          \ || line('.') > a:line2
+      break
+    endif
+    let l:info = spellbadword()
+    call add(l:entries, {'bufnr': bufnr(''),
+          \ 'lnum': line('.'), 'col': col('.'),
+          \ 'text': expand("<cword>")})
+
+          " \ 'text': l:info[0].': ['.l:info[1].']'})
+    echon printf('%g%%...', 100*str2float(line('.'))/line('$'))
+    let l:lastpos = [line('.'), col('.')]
+  endwhile
+  echon 'Spell check complete'
+  if a:clear
+      call setqflist([], 'r', {'items': [], 'title': 'Spelling errors'})
+  endif
+  call setqflist(l:entries, 'a')
+  call winrestview(l:view)
+  botright cwindow 8
+  let l:winid = getqflist({'winid': 0}).winid
+  call setwinvar(win_id2win(l:winid), '&spell', 1)
+endfunction
+
+command! -range=% -bang SpellCheck
+            \ call FindMisspelled(<line1>, <line2>, <bang>1)
+command! -range=% -bang WinSpellCheck
+            \ cexpr '' | windo SpellCheck!
+
+" https://github.com/tyru/open-browser.vim
+	" let g:netrw_nogx = 1 " disable netrw's gx mapping.
+	" nmap gx <Plug>(openbrowser-smart-search)
+	" vmap gx <Plug>(openbrowser-smart-search)
+
+function! s:get_terminal_buffer() abort
+    let buflist = tabpagebuflist(tabpagenr())
+    call filter(buflist, {i,v -> getbufvar(v, '&bt', '') ==# 'terminal'})
+    return get(buflist, 0 , 0)
+endfunction
+function! Terminal_open()
+    let term_buffer = s:get_terminal_buffer()
+    if term_buffer
+        let id = bufwinid(term_buffer)
+        call win_gotoid(id)
+        return
+    endif
+    terminal ++rows=11
+endfunction
+function! Terminal_close()
+    let term_buffer = s:get_terminal_buffer()
+    if term_buffer
+        " noa call win_gotoid(bufwinid(term_buffer))
+        exe bufwinnr(term_buffer).'quit!'
+    endif
+endfunction
+
+nnoremap <silent> [$ :<c-u>call Terminal_open()<cr>
+nnoremap <silent> ]$ :<c-u>call Terminal_close()<cr>
 
 " }}}1
 
@@ -3194,6 +3816,10 @@ call SiteSetupPost()
 function! FixIndents()
     call SecureModelines_DoModelines()
     echo &et &ts &sw &sts &sta
+endfunction
+
+function! ShowIndents()
+    set et? ts? sw? sts? sta?
 endfunction
 
 function! s:init()
@@ -3220,6 +3846,9 @@ function! s:init()
     nnoremap [ov :<c-u>call <sid>virtualedit_all(1)<cr>
     nnoremap ]ov :<c-u>call <sid>virtualedit_all(0)<cr>
     nnoremap =ov :<c-u>call <sid>virtualedit_all(-1)<cr>
+
+    " disable ultisnips autocommands
+    au! UltiSnips_AutoTrigger
 
     " XXX testing
     if g:rc_disable_youcompleteme
