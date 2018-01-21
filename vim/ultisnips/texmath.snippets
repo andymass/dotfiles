@@ -27,8 +27,17 @@ snippet eqann "Equation array without numbers" b
 \end{eqnarray*}
 
 endsnippet
-snippet frac "Fraction" w
+
+snippet frac "Fraction" i
 \frac{${1:${VISUAL:nom}}}{${2:denom}}
+endsnippet
+
+snippet int "Integral" i
+\int_{${1:nom}}^{${2:denom}} ${VISUAL}
+endsnippet
+
+snippet Int "Integral with differential" i
+\int_{${1:nom}}^{${2:denom}} ${0:${VISUAL}} \der ${3:diff}
 endsnippet
 
 snippet mat "Smart Matrix"
