@@ -1,0 +1,63 @@
+export LESS_TERMCAP_mb=$'\E[01;31m'
+export LESS_TERMCAP_md=$'\E[01;38;5;4m'
+export LESS_TERMCAP_me=$'\E[0m'
+export LESS_TERMCAP_se=$'\E[0m'
+export LESS_TERMCAP_so=$'\E[48;5;3m\E[38;5;18m'
+export LESS_TERMCAP_ue=$'\E[0m'
+export LESS_TERMCAP_us=$'\E[04;38;5;2m'
+
+export SCRIPTDIR=~/script
+export ZOTSTORE=~/.zotero/zotero/zwa4arpb.default/zotero/storage
+export FONTSDIR=~/.local/share/fonts
+
+export ASPROOT=~/build/arch
+
+[[ $COLORSCHEME ]] || export COLORSCHEME=hopper1
+
+export SYMBOL_LEFT_SEP=''
+export SYMBOL_RIGHT_SEP=''
+export SYMBOL_LEFT_ALT_SEP=''
+export SYMBOL_RIGHT_ALT_SEP=''
+export SYMBOL_BRANCH=''
+export SYMBOL_READONLY='🔒'
+export SYMBOL_LINENR=''
+export SYMBOL_PASTE='🐧'
+
+# set the path for all non-login shells (e.g., ssh one-liners)
+# arch: this is clobbered by ~/etc/zsh/zprofile for login shells
+typeset -U path
+path=(~/bin $path)
+
+# 
+function shelltype() {
+    [[ -o login ]] && print -n 'login, '  || print -n 'non-login, '
+    [[ -o interactive ]] && print interactive || print non-interactive
+}
+
+# ssh agent functions
+function agent() {
+    export SSH_ASKPASS=/usr/bin/ksshaskpass
+
+    # if no agent is running, start one up
+    if ! pgrep -u "$USER" ssh-agent > /dev/null; then
+        (umask 077; touch ~/.ssh-agent-info)
+        ssh-agent > ~/.ssh-agent-info
+    fi
+
+    # if we don't know where the agent is, get its info
+    if [[ "$SSH_AGENT_PID" = "" ]]; then
+        eval "$(<~/.ssh-agent-info)" > /dev/null
+    fi
+
+    ssh-add -l &>/dev/null || ssh-add </dev/null
+
+    SSH_ASKPASS=
+}
+
+function rmagent() {
+    export SSH_AGENT_PID=
+    export SSH_AUTH_SOCK=
+    pkill ssh-agent
+    rm ~/.ssh-agent-info
+}
+

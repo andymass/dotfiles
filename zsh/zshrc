@@ -1,0 +1,232 @@
+# If you come from bash you might have to change your $PATH.
+# export PATH=$HOME/bin:/usr/local/bin:$PATH
+
+# Path to your oh-my-zsh installation.
+export ZSH=$HOME/.oh-my-zsh
+
+# Set name of the theme to load. Optionally, if you set this to "random"
+# it'll load a random theme each time that oh-my-zsh is loaded.
+# See https://github.com/robbyrussell/oh-my-zsh/wiki/Themes
+ZSH_THEME="flazz"
+
+# Uncomment the following line to use case-sensitive completion.
+# CASE_SENSITIVE="true"
+
+# Uncomment the following line to use hyphen-insensitive completion. Case
+# sensitive completion must be off. _ and - will be interchangeable.
+# HYPHEN_INSENSITIVE="true"
+
+# Uncomment the following line to disable bi-weekly auto-update checks.
+# DISABLE_AUTO_UPDATE="true"
+
+# Uncomment the following line to change how often to auto-update (in days).
+# export UPDATE_ZSH_DAYS=13
+
+# Uncomment the following line to disable colors in ls.
+# DISABLE_LS_COLORS="true"
+
+# Uncomment the following line to disable auto-setting terminal title.
+# DISABLE_AUTO_TITLE="true"
+
+# Uncomment the following line to enable command auto-correction.
+# ENABLE_CORRECTION="true"
+
+# Uncomment the following line to display red dots whilst waiting for completion.
+COMPLETION_WAITING_DOTS="true"
+
+# Uncomment the following line if you want to disable marking untracked files
+# under VCS as dirty. This makes repository status check for large repositories
+# much, much faster.
+# DISABLE_UNTRACKED_FILES_DIRTY="true"
+
+# Uncomment the following line if you want to change the command execution time
+# stamp shown in the history command output.
+# The optional three formats: "mm/dd/yyyy"|"dd.mm.yyyy"|"yyyy-mm-dd"
+HIST_STAMPS="mm/dd/yyyy"
+
+# Would you like to use another custom folder than $ZSH/custom?
+# ZSH_CUSTOM=/path/to/new-custom-folder
+
+# Which plugins would you like to load? (plugins can be found in ~/.oh-my-zsh/plugins/*)
+# Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
+# Example format: plugins=(rails git textmate ruby lighthouse)
+# Add wisely, as too many plugins slow down shell startup.
+plugins=( safe-paste command-not-found git vi-mode emoji emoji-clock )    # history-substring-search
+export KEYTIMEOUT=1
+
+source $ZSH/oh-my-zsh.sh
+
+# User configuration
+
+# export MANPATH="/usr/local/man:$MANPATH"
+
+# You may need to manually set your language environment
+# export LANG=en_US.UTF-8
+
+# Preferred editor for local and remote sessions
+# if [[ -n $SSH_CONNECTION ]]; then
+#   export EDITOR='vim'
+# else
+#   export EDITOR='mvim'
+# fi
+export EDITOR=vim
+
+# Compilation flags
+# export ARCHFLAGS="-arch x86_64"
+
+# ssh
+# export SSH_KEY_PATH="~/.ssh/rsa_id"
+
+# Set personal aliases, overriding those provided by oh-my-zsh libs,
+# plugins, and themes. Aliases can be placed here, though oh-my-zsh
+# users are encouraged to define aliases within the ZSH_CUSTOM folder.
+# For a full list of active aliases, run `alias`.
+#
+# Example aliases
+# alias zshconfig="mate ~/.zshrc"
+# alias ohmyzsh="mate ~/.oh-my-zsh"
+
+# basic
+unalias l
+alias ll='ls -lrthF --color=always'
+alias la='ls -alrthF --color=always'
+alias ls='ls --color=auto'
+alias full='ls -rt -d -1 $PWD/{*,.*}'
+
+# chromium=$HOME/.local/share/applications/chromium.desktop
+# alias chrome="kioclient5 exec '$chromium'"
+# alias chromium="kioclient5 exec '$chromium'"
+alias chrome='chromium'
+
+signal=$HOME/.local/share/applications/signal.desktop
+alias signal="kioclient5 exec '$signal'"
+
+# basic
+if env vim --version 2>/dev/null | grep '+clientserver' >/dev/null; then
+    alias vim='vim --servername $(random-word 1 $SCRIPTDIR/viwords)'
+fi
+alias e='vim' vi='vim'
+
+alias clc='clear'
+alias less='less -XRF'
+alias E='sudo -e'
+alias q='exit'
+alias ':q'='exit'
+alias rice="toilet -f future --metal -w 80"
+alias when='date -d'
+alias pick='fzf --height=7'
+alias info='info --vi-keys'
+alias show='cat -vT'
+alias ag='ag --one-device'
+alias mv='mv -i'
+alias cp='cp -i'
+alias diff='diff --color=auto'
+alias path='echo -e ${PATH//:/\\n}'
+alias latexdef='texdef 2>/dev/null --tex latex'
+alias motivate='oblique | pokesay'
+alias pbcopy='xclip -i -selection clipboard'
+alias pbpaste='xclip -o -selection clipboard'
+
+alias myip='curl -s https://api.ipify.org'
+function latlong() {
+    geoiplookup $(myip) \
+        | egrep -o '\-?[0-9]{1,2}\.[0-9]*' | \paste -s -d','
+}
+function solunar() {
+    ~/ext/solunar_cmdline/solunar -t --full -l "$(latlong)"
+}
+alias define='STARDICT_DATA_DIR=$SCRIPTDIR sdcv -e'
+
+# kde specific
+if [[ -n "$KDE_SESSION_VERSION" ]]; then
+    alias open='kde-open5 --noninteractive'
+fi
+
+# arch specific
+if [[ -x "$(command -v pacman)" ]]; then
+    alias up='pacaur -Syu'
+    alias upp='PKGEXT=.pkg.tar pacaur -Syu --devel --needed'
+    alias upp-one='export PKGEXT=.pkg.tar pacaur -S'
+    alias jcl='journalctl --since -5d'
+    alias scl='systemctl'
+fi
+
+# site specific
+if [[ $(hostname) = "hopper" ]]; then
+    alias camoff='echo 0 | sudo tee /sys/bus/usb/devices/1-5/bConfigurationValue'
+    alias camon='echo 1 | sudo tee /sys/bus/usb/devices/1-5/bConfigurationValue'
+    alias camstatus='cat /sys/bus/usb/devices/1-5/bConfigurationValue'
+fi
+
+# common host shortcuts
+alias lab='env TERM=$TERM^scheme=hopper1 ssh lab'
+alias davenporter='env TERM=$TERM^scheme=hopper1 ssh davenporter'
+
+function showclip() {
+    # buffer-cut
+    for sel in primary secondary clipboard; do
+        echo -n "$sel = {"
+        xclip -o -selection "$sel" 2>&1
+        echo '}'
+    done
+}
+
+# source: https://bbs.archlinux.org/viewtopic.php?id=93683
+function pacls() {
+  LC_ALL=C pacman -Qei $(pacman -Qu | cut -d " " -f 1) | \
+    awk 'BEGIN {FS=":"} /^Name/{printf("\033[1;36m%s\033[1;37m", $2)} /^Description/{print $2}'
+}
+
+# edit filenames given on stdin
+function el () {
+    inargs="$@"
+    xargs bash -c "vim \"\$@\" $inargs < /dev/tty" ignoreme;
+}
+
+# tree with more info
+function lt() {
+    tree -Csh -F $1 | less -X -F
+}
+
+bindkey '^P' history-beginning-search-backward
+bindkey '^N' history-beginning-search-forward
+bindkey '^[[Z' reverse-menu-complete
+bindkey '^[[3~' delete-char
+
+unalias run-help
+autoload run-help
+alias help=run-help
+
+# start up agent (assume this is non-interactive)
+agent
+
+# (this should probably be a custom plugin)
+function cursor-shape() {
+    case $KEYMAP in
+        vicmd)      print -n -- "\E]50;CursorShape=0\C-G";;  # block cursor
+        viins|main) print -n -- "\E]50;CursorShape=1\C-G";;  # line cursor
+    esac
+}
+
+# todo figure out this mess, what plugins step on zle-..?
+# autoload -Uz add-zsh-hook
+# add-zsh-hook precmd cursor-shape
+
+# function hookfun() {
+#     olddef=$(declare -f $1)
+#     if [ "$olddef" ]; then
+#         # eval "old-$olddef"
+#         eval "function $1(){old-$olddef; old-$1; $2}"
+#     else
+#         eval "function $1(){$2}"
+#     fi
+#     zle -N $1
+# }
+
+# disabled for now, vim starts with bar cursor
+# TODO: need to check for plugin conflicts with these functions
+#
+# hookfun zle-line-init cursor-shape
+# hookfun zle-line-finish cursor-shape
+# hookfun zle-keymap-select cursor-shape
+
