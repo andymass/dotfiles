@@ -10,7 +10,9 @@ export SCRIPTDIR=~/script
 export ZOTSTORE=~/.zotero/zotero/zwa4arpb.default/zotero/storage
 export FONTSDIR=~/.local/share/fonts
 
-export ASPROOT=~/build/arch
+export DOTSDIR=~/script/dotfiles
+
+export _VIMRUNTIME=/usr/share/vim/vim80
 
 [[ $COLORSCHEME ]] || export COLORSCHEME=hopper1
 
@@ -24,11 +26,15 @@ export SYMBOL_LINENR=''
 export SYMBOL_PASTE='🐧'
 
 # set the path for all non-login shells (e.g., ssh one-liners)
-# arch: this is clobbered by ~/etc/zsh/zprofile for login shells
+# arch: this is clobbered by /etc/zsh/zprofile for login shells (old info)
 typeset -U path
+
+path=($(ruby -rubygems -e 'puts Gem.user_dir')/bin $path)
+path=(~/.local/bin $path)
+
 path=(~/bin $path)
 
-# 
+#
 function shelltype() {
     [[ -o login ]] && print -n 'login, '  || print -n 'non-login, '
     [[ -o interactive ]] && print interactive || print non-interactive

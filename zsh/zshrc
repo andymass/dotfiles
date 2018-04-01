@@ -51,7 +51,7 @@ HIST_STAMPS="mm/dd/yyyy"
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=( safe-paste command-not-found git vi-mode emoji emoji-clock )    # history-substring-search
+plugins=( safe-paste command-not-found git vi-mode emoji emoji-clock extract wd )    # history-substring-search zsh-completions
 export KEYTIMEOUT=1
 
 source $ZSH/oh-my-zsh.sh
@@ -91,7 +91,8 @@ unalias l
 alias ll='ls -lrthF --color=always'
 alias la='ls -alrthF --color=always'
 alias ls='ls --color=auto'
-alias full='ls -rt -d -1 $PWD/{*,.*}'
+alias full='readlink -f'
+alias fuls='ls -rt -d -1 $PWD/* $PWD/.*'
 
 # chromium=$HOME/.local/share/applications/chromium.desktop
 # alias chrome="kioclient5 exec '$chromium'"
@@ -126,6 +127,8 @@ alias latexdef='texdef 2>/dev/null --tex latex'
 alias motivate='oblique | pokesay'
 alias pbcopy='xclip -i -selection clipboard'
 alias pbpaste='xclip -o -selection clipboard'
+
+alias dots='git --git-dir=$DOTSDIR/.git'
 
 alias myip='curl -s https://api.ipify.org'
 function latlong() {
@@ -196,6 +199,17 @@ bindkey '^[[3~' delete-char
 unalias run-help
 autoload run-help
 alias help=run-help
+
+export large=/home/large-home/andy
+
+# zmv, zargs
+autoload -U zmv
+alias zmv='noglob zmv'
+alias zcp='noglob zmv -C'
+alias zln='noglob zmv -L'
+alias zsy='noglob zmv -Ls'
+
+autoload -U zargs
 
 # start up agent (assume this is non-interactive)
 agent
